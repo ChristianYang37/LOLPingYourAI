@@ -68,13 +68,21 @@ if op == "doctor" {
             }
             // WebKit can publish the focused window before its input focus has settled.
             let needsInputFocus = op == "type" || op == "key"
-            let requestedTree = needsInputFocus && requestInputAccessibility(ax, Int32(number(w, "pid")))
-            let deadline = Date().addingTimeInterval(requestedTree ? 4.0 : 1.0)
+            var requestedTree = false
+            var triedTree = false
+            var deadline = Date().addingTimeInterval(1.0)
             var stableSince: Date?
             repeat {
                 guard !cancellationRequested else { fail("Desktop action cancelled") }
                 if hasTargetFocus(ax, Int32(number(w, "pid")), requireInput: needsInputFocus) { if stableSince == nil { stableSince = Date() } }
-                else { stableSince = nil }
+                else {
+                    stableSince = nil
+                    if needsInputFocus && !triedTree && lastFocusFailure == "no focused control" {
+                        triedTree = true
+                        requestedTree = requestInputAccessibility(ax, Int32(number(w, "pid")))
+                        if requestedTree { deadline = Date().addingTimeInterval(4.0) }
+                    }
+                }
                 if let since = stableSince, Date().timeIntervalSince(since) >= 0.12 { break }
                 RunLoop.current.run(until: Date().addingTimeInterval(0.02))
             } while Date() < deadline

@@ -40,7 +40,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   const service = new Teammate({ store, desktop, adapters }); await service.init();
   const icons = new IconCandidates(join(settingsDir(), 'icon-candidates'));
   const bridge = await startBridge(service, store);
-  const iconJob = new IconJob({ icons, mcp, makeAdapter: (connection: any) => makeAdapters(connection)[service.config.harness as keyof typeof adapters], notice: (text: string) => service.notice(text) });
+  const iconJob = new IconJob({ icons, mcp, makeAdapter: (connection: any, harness: keyof typeof adapters) => makeAdapters(connection)[harness], notice: (text: string) => service.notice(text) });
   mcp.env.LOLPINGAI_ENDPOINT = bridge.endpoint; mcp.env.LOLPINGAI_TOKEN = bridge.token;
   service.on('notice', (message: string) => overlays.toast('LOLPingYourAI', message));
   const view = () => ({ ...service.status(), iconGenerating: Boolean(iconJob.job), language: resolveLang(settings.get().language, app.getLocale()), customEmotes: settings.get().customEmotes });
@@ -71,7 +71,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
     clearPack: async () => (await load('assets.mjs')).clearAssetPack(packDir),
     acceptIcon: async args => { const result = await library.save(await icons.prepare(args.id), settings.get().customEmotes); if (!result.ok) throw new Error(`Import failed: ${result.error}`); settings.update({ customEmotes: [...settings.get().customEmotes, result.emote] }); return result; },
     generateIcon: async args => {
-      return iconJob.start(args, { reasoningEffort: service.config.reasoningEffort, dshThinking: service.config.dshThinking, model: service.config.modelSelections[service.config.harness]?.model ?? '', fastMode: service.config.modelSelections[service.config.harness]?.fastMode ?? false });
+      return iconJob.start(args, { harness: service.config.harness, reasoningEffort: service.config.reasoningEffort, dshThinking: service.config.dshThinking, model: service.config.modelSelections[service.config.harness]?.model ?? '', fastMode: service.config.modelSelections[service.config.harness]?.fastMode ?? false });
     },
     openAccess: () => { electron.systemPreferences.isTrustedAccessibilityClient(true); return electron.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'); },
     openScreen: async () => { if (process.platform !== 'darwin') return; await electron.desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }).catch(() => {}); return electron.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'); },

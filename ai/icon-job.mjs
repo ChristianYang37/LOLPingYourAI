@@ -19,7 +19,7 @@ export class IconJob {
       } }, { only: ['submit_icon'], persist: false });
       if (!job.active) throw new Error('Icon generation cancelled');
       const mcp = { ...this.mcp, env: { ...this.mcp.env, LOLPINGAI_ENDPOINT: job.bridge.endpoint, LOLPINGAI_TOKEN: job.bridge.token } };
-      const adapter = job.adapter = this.makeAdapter(mcp);
+      const adapter = job.adapter = this.makeAdapter(mcp, settings.harness);
       adapter.on('failure', error => { this.notice(error.message); this.finish(job); });
       adapter.on('completed', () => this.finish(job));
       // No implicit approval of tools or commands outside the icon bridge.

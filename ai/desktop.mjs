@@ -19,6 +19,7 @@ export class Desktop {
       signal?.addEventListener('abort', abort, { once: true });
       const cleanup = () => { clearTimeout(timer); clearTimeout(killTimer); signal?.removeEventListener('abort', abort); };
       let output = '', error = ''; const timer = setTimeout(() => child.kill(), 15000);
+      child.stdin.on('error', e => { error ||= e.message; });
       child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { error += d; });
       child.on('error', e => { cleanup(); reject(e); });
       child.on('close', code => { cleanup(); if (signal?.aborted) return reject(new Error('Desktop action cancelled')); try { const data = JSON.parse(output); data.error || code ? reject(new Error(data.error ?? error)) : resolve(data); } catch { reject(new Error(error || `Desktop helper exited (${code})`)); } });
