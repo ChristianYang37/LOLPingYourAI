@@ -32,7 +32,7 @@ External tester run of `docs/acceptance.md` steps 1–8. The full report, with p
 - **Step 6:** a default 0.5-hour ward survived an app quit and relaunch with the board open, and made exactly one observation-only visit 4 s after its due time. In accelerated runs (3 min):
   - a ward cancelled in Settings never ran;
   - a ward due while the screen was locked (locked 21:27:29–21:33:24) ran once, 4 s after unlock.
-  - Separately, a ward due during unplanned system sleep ran once, 5 s after wake.
+  - Separately, a ward came due during unplanned system sleep. It ran once at 21:10:06, 5 s after the lid-open wake at 21:10:01; the sleep and wake times are from the attached `pmset -g log` excerpt.
 - **Step 7:**
   - a local crop (`local-crop`), a description-generated emote and a reference-image-generated emote (both labelled `vector-generated`) were accepted onto the wheel;
   - a custom emote was bound as an `emotion` signal and reached the teammate with that mode;

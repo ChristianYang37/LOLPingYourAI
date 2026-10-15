@@ -1,0 +1,22 @@
+$ pmset -g log | awk '$1=="2026-10-15" && $2>="20:26:00" && $2<="21:10:30"' | egrep 'Display is turned|Sleep  |DarkWake  |Wake  ' | cut -c1-150
+(run at 2026-10-15 22:39:45 CST, after the fact; times are local UTC+8)
+2026-10-15 20:28:28 +0800 Notification        	Display is turned off                                                      	          
+2026-10-15 20:28:33 +0800 Sleep               	Entering Sleep state due to 'Clamshell Sleep':TCPKeepAlive=active Using AC (Charge:53%) 3 secs    
+2026-10-15 20:28:36 +0800 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) acdetach SMC.OutboxNotEmpty nub-s
+2026-10-15 20:28:44 +0800 Sleep               	Entering Sleep state due to 'Thermal Emergency Sleep':TCPKeepAlive=inactive Using Batt (Charge:53%) 36 
+2026-10-15 20:29:20 +0800 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wifibt SMC.OutboxNotEmpty bluetoo
+2026-10-15 20:29:28 +0800 Sleep               	Entering Sleep state due to 'Thermal Emergency Sleep':TCPKeepAlive=inactive Using Batt (Charge:53%) 542
+2026-10-15 20:38:30 +0800 DarkWake            	DarkWake from Deep Idle [CDNP] : due to NUB.SPMI0.SW3 nub-spmi0.0x02 rtc/Maintenance Using BATT (Charge
+2026-10-15 20:38:35 +0800 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=inactive Using Batt (Charge:53%) 948 secs 
+2026-10-15 20:54:23 +0800 DarkWake            	DarkWake from Deep Idle [CDNP] : due to NUB.SPMI0.SW3 nub-spmi0.0x02 rtc/SleepService Using BATT (Charg
+2026-10-15 20:54:25 +0800 Sleep               	Entering Sleep state due to 'Sleep Service Back to Sleep':TCPKeepAlive=inactive Using Batt (Charge:53%)
+2026-10-15 21:01:42 +0800 DarkWake            	DarkWake from Deep Idle [CDNP] : due to NUB.SPMI0.SW3 nub-spmi0.0x02 rtc/Maintenance Using BATT (Charge
+2026-10-15 21:01:47 +0800 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=inactive Using Batt (Charge:53%) 451 secs 
+2026-10-15 21:09:18 +0800 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) USB-C_plug SMC.OutboxNotEmpty nub
+2026-10-15 21:09:18 +0800 Wake                	DarkWake to FullWake from Deep Idle [CDNVAP] : due to Notification Using AC (Charge:53%) 4 secs    
+2026-10-15 21:09:18 +0800 Notification        	Display is turned on                                                       	          
+2026-10-15 21:09:22 +0800 Sleep               	Entering DarkWake state due to 'Notification Wake Back to Sleep':TCPKeepAlive=active Using AC (Charge:5
+2026-10-15 21:09:22 +0800 Notification        	Display is turned off                                                      	          
+2026-10-15 21:09:28 +0800 Sleep               	Entering Sleep state due to 'Notification Wake Back to Sleep':TCPKeepAlive=active Using AC (Charge:53%)
+2026-10-15 21:10:01 +0800 Notification        	Display is turned on                                                       	          
+2026-10-15 21:10:01 +0800 Wake                	Wake from Deep Idle [CDNVA] : due to smc.sysState.Wake(0x70070000) lid SMC.OutboxNotEmpty RTP.multi-tou
