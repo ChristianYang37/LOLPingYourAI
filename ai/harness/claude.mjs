@@ -47,7 +47,8 @@ export class ClaudeAdapter extends EventEmitter {
     const refuse = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
     this.effectiveEffort = chooseEffort(this.effort, ['low', 'medium', 'high']);
     const options = { effort: this.effectiveEffort, ...(this.selection.model ? { model: this.selection.model } : {}), settings: { fastMode: this.selection.fastMode }, cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
-
+      // Ignore claude.ai connectors and the user's own MCP settings; this teammate sees only the project server.
+      strictMcpConfig: true,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       // Hooks run before settings allow-rules, so a user's global allow list cannot widen this teammate's tools.
       hooks: { PreToolUse: [{ hooks: [async input => { const reason = toolPolicy(input.tool_name, input.tool_input ?? {}, this.cwd); return reason ? refuse(reason) : {}; }] }] },
