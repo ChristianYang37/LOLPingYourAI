@@ -9,7 +9,8 @@ const skillPath = fileURLToPath(new URL('../../skills/lolping-your-ai/SKILL.md',
 const cwd = join(homedir(), 'Library/Application Support/LOLPingYourAI');
 
 // Stands in for the Agent SDK: reads one streamed user message per turn and answers it with a result.
-function fakeSdk({ missingSessions = new Set() } = {}) {
+// `exiting` keeps the stream open after the input ends, as Claude Code does while it shuts down.
+function fakeSdk({ missingSessions = new Set(), exiting } = {}) {
   const calls = [];
   const query = ({ prompt, options }) => {
     const call = { options, prompts: [], interrupted: false }; calls.push(call);
@@ -18,7 +19,7 @@ function fakeSdk({ missingSessions = new Set() } = {}) {
     async function* run() {
       if (options.resume && missingSessions.has(options.resume)) { options.stderr?.(`No conversation found with session ID: ${options.resume}\n`); throw new Error('Claude Code process exited with code 1'); }
       for (;;) {
-        const next = await input.next(); if (next.done) return;
+        const next = await input.next(); if (next.done) { await exiting?.(); return; }
         call.prompts.push(next.value.message.content);
         yield { type: 'system', subtype: 'init', session_id: session };
         if (await Promise.race([interrupted, new Promise(resolve => setTimeout(() => resolve(false), 20))])) { yield { type: 'result', subtype: 'error_during_execution', is_error: true, session_id: session }; return; }
@@ -41,6 +42,16 @@ test('a reaction during a Claude turn is delivered after it, in the same session
   assert.deepEqual(sdk.calls[0].prompts.map(p => p[0].text), ['Assist: finish the note', 'The user approves your current direction.']);
   assert.equal(sdk.calls[0].options.sessionId, id); assert.equal(a.active.size, 0);
   await a.send(id, 'Next ping'); await completion(a); assert.equal(sdk.calls[1].options.resume, id);
+});
+
+test('a reaction that arrives while a finished Claude turn shuts down starts the next turn instead of being lost', async () => {
+  let ended; const inputEnded = new Promise(resolve => { ended = resolve; });
+  const sdk = fakeSdk({ exiting: () => { ended(); return new Promise(resolve => setTimeout(resolve, 20)); } }), a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
+  const id = await a.create(); await a.send(id, 'Question');
+  await inputEnded; assert.equal(a.active.has(id), true);
+  await a.steer(id, 'Nice'); await completion(a);
+  assert.deepEqual(sdk.calls.map(call => call.prompts.map(p => p[0].text)), [['Question'], ['Nice']]);
+  assert.equal(sdk.calls[1].options.resume, id);
 });
 
 test('Claude retreat interrupts, drops queued reactions and confirms the turn as interrupted', async () => {

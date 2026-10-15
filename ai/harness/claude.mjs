@@ -48,7 +48,8 @@ export class ClaudeAdapter extends EventEmitter {
       yield message(content);
       for (let turn = 1; ; turn++) {
         while (record.results < turn && !record.closed) await new Promise(resolve => { record.wake = resolve; });
-        if (record.closed || record.cancelled || !record.followUps.length) return;
+        // Ending the input closes the record at once: a reaction sent while the CLI shuts down starts the next turn instead of being lost.
+        if (record.closed || record.cancelled || !record.followUps.length) { record.closed = true; return; }
         yield message(record.followUps.splice(0).join('\n\n'));
       }
     }
