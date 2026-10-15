@@ -70,8 +70,11 @@ export class ClaudeAdapter extends EventEmitter {
     }
     const start = resume => {
       Object.assign(record, { results: 0, stderr: '' });
+      let settingsReady, settingsFailed;
+      record.settingsReady = new Promise((resolve, reject) => { settingsReady = resolve; settingsFailed = reject; });
+      record.settingsReady.catch(() => {});
       record.stream = query({ prompt: messages(), options: { ...options, stderr: data => { record.stderr = (record.stderr + data).slice(-4000); }, ...(resume ? { resume: id } : { sessionId: id }) } });
-      record.settingsReady = (async () => {
+      void (async () => {
         if (!record.stream.supportedModels || !record.stream.applyFlagSettings) return;
         const models = await record.stream.supportedModels();
         const requested = this.selection.model;
@@ -82,8 +85,7 @@ export class ClaudeAdapter extends EventEmitter {
         const supported = model.supportsEffort === false ? [] : model.supportedEffortLevels ?? ['low', 'medium', 'high'];
         this.effectiveEffort = chooseEffort(this.effort, supported);
         await record.stream.applyFlagSettings({ fastMode: this.selection.fastMode, ...(this.effectiveEffort ? { effortLevel: this.effectiveEffort } : {}) });
-      })();
-      record.settingsReady.catch(() => {});
+      })().then(settingsReady, settingsFailed);
 
     };
     start(this.known.has(id));

@@ -120,3 +120,21 @@ test('retreat cancels a late reaction waiting for Claude process shutdown', asyn
   done = completion(a); await a.send(id, 'Work', undefined, { model: 'b', fastMode: false }); await done;
   assert.equal(sdk.calls.at(-1).options.model, 'b'); assert.deepEqual(sdk.calls.at(-1).flags, { fastMode: false, effortLevel: 'medium' });
  });
+
+test('Claude holds even an eagerly consumed prompt until model settings are applied', async () => {
+  let resolveModels, entered, earlyPrompt = false;
+  const ready = new Promise(resolve => { entered = resolve; });
+  const models = new Promise(resolve => { resolveModels = resolve; });
+  const sdk = { query({ prompt }) {
+    const input = prompt[Symbol.asyncIterator]();
+    const first = input.next().then(result => { earlyPrompt = true; return result; });
+    async function* output() { await first; yield { type: 'result' }; await input.next(); }
+    return Object.assign(output(), { supportedModels: () => { entered(); return models; }, applyFlagSettings: async () => {}, close() {}, interrupt: async () => {} });
+  } };
+  const a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
+  const done = completion(a); await a.send(await a.create(), 'Work'); await ready;
+  await new Promise(resolve => setImmediate(resolve));
+  const escapedBeforeSettings = earlyPrompt;
+  resolveModels([{ value: 'default', supportedEffortLevels: ['low'] }]); await done;
+  assert.equal(escapedBeforeSettings, false, 'No prompt may leave before fast/model settings are checked');
+});
