@@ -229,6 +229,8 @@ pnpm dist                                       # Windows x64 安装包（需在
 
 ## 致谢与许可
 
+感谢 [@fzh000543](https://github.com/fzh000543) 发布早期的 [Windows 便携版](https://github.com/fzh000543/LOLPingYourAI/releases/tag/v0.1.1-win.1)，并在 [PR #7](https://github.com/ChristianYang37/LOLPingYourAI/pull/7) 中提供便携版打包配置和使用文档。
+
 基于 [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1 派生，输入助手、轮盘、覆盖层、设置和表情导入都来自它。Copyright © 2026 Danrui Meng，MIT。本仓库代码采用 MIT 许可（[LICENSE](LICENSE)）。
 
 英雄联盟的美术、动画和音效 © Riot Games, Inc.，**不**适用 MIT 许可，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。这是独立的粉丝项目，未获 Riot Games、OpenAI 或 Anthropic 认可。
