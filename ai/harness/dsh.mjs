@@ -8,7 +8,7 @@ import { chooseEffort } from './effort.mjs';
 export class DshAdapter extends EventEmitter {
   constructor({ command = 'dsh', args = [], cwd, mcp, skillPath, patch, env = {} }) {
     super(); Object.assign(this, { command, args, cwd, mcp, skillPath, patch, env });
-    this.preparing = new Set(); this.cancelEpoch = new Map(); this.active = new Map(); this.loaded = new Map(); this.pending = new Map(); this.nextId = 1; this.effort = 0;
+    this.defaultModels = new Map(); this.preparing = new Set(); this.cancelEpoch = new Map(); this.active = new Map(); this.loaded = new Map(); this.pending = new Map(); this.nextId = 1; this.effort = 0;
   }
   connect() { return this.ready ??= this.start().catch(e => { this.ready = null; throw e; }); }
   async start() {
@@ -17,7 +17,7 @@ export class DshAdapter extends EventEmitter {
     child.stderr.on('data', d => this.emit('diagnostic', d.toString().slice(0, 2000)));
     child.stdin.on('error', () => {});
     const failed = error => {
-      if (this.child !== child) return; this.child = null; this.ready = null; this.loaded.clear();
+      if (this.child !== child) return; this.child = null; this.ready = null; this.loaded.clear(); this.profileDefaultModel = undefined;
       for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); } this.pending.clear();
       if (!this.closing) this.emit('failure', error);
     };
@@ -44,13 +44,31 @@ export class DshAdapter extends EventEmitter {
   respond(id, result) { this.child?.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n'); }
   async capabilities() { await this.connect(); return { images: Boolean(this.info.agentCapabilities?.promptCapabilities?.image), steer: 'after-current-turn', interrupt: true, desktop: 'project-mcp', protocol: 'ACP', agent: this.info.agentInfo }; }
   sessionParams() { return { cwd: this.cwd, mcpServers: [{ name: 'lolpingyourai', command: this.mcp.command, args: this.mcp.args, env: Object.entries(this.mcp.env ?? {}).map(([name, value]) => ({ name, value })) }] }; }
-  async create() { await this.connect(); const r = await this.rpc('session/new', this.sessionParams()); this.loaded.set(r.sessionId, r.configOptions ?? []); return r.sessionId; }
+  async create() { await this.connect(); const r = await this.rpc('session/new', this.sessionParams()); this.loaded.set(r.sessionId, r.configOptions ?? []); this.profileDefaultModel ??= r.configOptions?.find(o => o.id === 'model')?.currentValue; this.defaultModels.set(r.sessionId, r.configOptions?.find(o => o.id === 'model')?.currentValue); return r.sessionId; }
   async resume(id) { await this.connect(); if (!this.loaded.has(id)) { const r = await this.rpc('session/resume', { ...this.sessionParams(), sessionId: id }); this.loaded.set(id, r.configOptions ?? []); } return id; }
+  async listModels() {
+    const id = await this.create();
+    try {
+      const selector = this.loaded.get(id).find(o => o.id === 'model');
+      return { models: (selector?.options ?? []).flatMap(group => group.options ? group.options.map(o => ({ ...o, name: `${group.name} / ${o.name}` })) : [group]).map(o => ({ id: o.value, name: o.name ?? o.value, fastMode: false })), defaultModel: selector?.currentValue };
+    } finally { await this.rpc('session/close', { sessionId: id }); this.loaded.delete(id); this.defaultModels.delete(id); }
+  }
   async send(id, text, image, options = {}) {
     if (this.active.has(id) || this.preparing.has(id)) throw new Error('DSH turn is still active');
     const epoch = this.cancelEpoch.get(id); this.preparing.add(id);
     try {
-    await this.resume(id); this.effort = options.reasoningEffort ?? this.effort;
+    await this.resume(id);
+    this.selection = { model: '', fastMode: false, ...this.selection, ...options };
+    if (this.selection.fastMode) throw new Error('DSH ACP does not expose a fast-mode control');
+    const modelSelector = this.loaded.get(id).find(o => o.id === 'model');
+    const requested = this.selection.model || this.profileDefaultModel || this.defaultModels?.get(id);
+    if (requested && requested !== modelSelector?.currentValue) {
+      const result = await this.rpc('session/set_config_option', { sessionId: id, configId: 'model', value: requested });
+      this.loaded.set(id, result.configOptions ?? []);
+    }
+    this.effectiveModel = this.loaded.get(id).find(o => o.id === 'model')?.currentValue;
+    this.effectiveFastMode = false;
+    this.effort = options.reasoningEffort ?? this.effort;
     if (image && !this.info.agentCapabilities?.promptCapabilities?.image) throw new Error('This DSH model does not support images. Choose a vision model in your DSH profile; text-only models can test reactions, not screenshots.');
     const selector = this.loaded.get(id).find(o => o.id === 'reasoning_effort');
     const supported = (selector?.options ?? []).flatMap(o => o.options ?? [o]).map(o => o.value);

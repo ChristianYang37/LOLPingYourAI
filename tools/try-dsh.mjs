@@ -22,6 +22,8 @@ adapter.on('failure', e => console.error(e.message));
 adapter.on('event', e => { if (e.method === 'dsh/message') console.log(e.params.message.content.map(c => c.text).join('')); });
 try {
   console.log(JSON.stringify(await adapter.capabilities()));
+  const catalog = await adapter.listModels();
+  console.log(`ACP model catalog: ${catalog.models.length} choices; default ${catalog.defaultModel}`);
   const id = await adapter.create();
   await adapter.rpc('session/close', { sessionId: id }); adapter.loaded.delete(id); await adapter.resume(id);
   console.log('ACP initialize / create / MCP mount / close / resume: passed');

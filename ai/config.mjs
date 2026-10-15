@@ -1,4 +1,4 @@
-export const defaults = Object.freeze({ regionSize: 512, sessionHours: 2, wardHours: 0.5, harness: 'codex', banter: true, reasoningEffort: 0, dshThinking: true, setupComplete: false });
+export const defaults = Object.freeze({ regionSize: 512, sessionHours: 2, wardHours: 0.5, harness: 'codex', banter: true, reasoningEffort: 0, dshThinking: true, modelSelections: {}, setupComplete: false });
 
 export const signals = Object.freeze({
   missing: { label: 'Question', mode: 'observe', prompt: 'Explain or diagnose the highlighted region. Observe only; do not change anything.' },
@@ -29,6 +29,10 @@ export function validateConfig(value = {}) {
   if (typeof result.banter !== 'boolean') throw new Error('banter must be boolean');
   if (!Number.isInteger(result.reasoningEffort) || result.reasoningEffort < 0 || result.reasoningEffort > 8) throw new Error('Reasoning level must be an integer from 0 to 8');
   if (typeof result.setupComplete !== 'boolean') throw new Error('setupComplete must be boolean');
+  if (!result.modelSelections || typeof result.modelSelections !== 'object' || Array.isArray(result.modelSelections)) throw new Error('Invalid model selections');
+  for (const [harness, selection] of Object.entries(result.modelSelections)) {
+    if (!['codex', 'claude', 'dsh'].includes(harness) || !selection || typeof selection.model !== 'string' || selection.model.length > 500 || typeof selection.fastMode !== 'boolean') throw new Error('Invalid model selection');
+  }
   const modes = new Set(['observe', 'execute', 'interrupt', 'stop', 'ward', 'unward', 'emotion']);
   for (const [id, entry] of Object.entries(result.mappings ?? {})) {
     if (!/^[a-zA-Z0-9_:-]{1,80}$/.test(id) || !modes.has(entry.mode) || typeof entry.prompt !== 'string' || entry.prompt.length > 12000) throw new Error('Invalid signal mapping');

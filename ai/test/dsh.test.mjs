@@ -63,3 +63,18 @@ test('DSH on/off provider keeps thinking on even at ordinal zero', async () => {
   assert.equal(calls.find(c => c.method === 'session/set_config_option').params.value, 'high');
   const done = a.active.get(id).finished; finish(); await done;
 });
+
+ test('DSH loads grouped model choices and refreshes effort options after a model change', async () => {
+  const { a, calls, finish } = fixture(); const base = a.rpc;
+  const configs = model => [{ id: 'model', currentValue: model, options: [{ name: 'Provider', options: [{ value: 'a', name: 'A' }, { value: 'b', name: 'B' }] }] }, { id: 'reasoning_effort', options: (model === 'b' ? ['off', 'low', 'max'] : ['off', 'high']).map(value => ({ value })) }];
+  a.rpc = async (method, params) => {
+    if (method === 'session/new') { calls.push({ method, params }); return { sessionId: 's', configOptions: configs('a') }; }
+    if (method === 'session/set_config_option' && params.configId === 'model') { calls.push({ method, params }); return { configOptions: configs(params.value) }; }
+    return base(method, params);
+  };
+  const catalog = await a.listModels(); assert.equal(catalog.defaultModel, 'a'); assert.equal(catalog.models[1].name, 'Provider / B'); assert.equal(catalog.models[1].fastMode, false);
+  const id = await a.create(); await a.send(id, 'Hi', undefined, { model: 'b', reasoningEffort: 0 });
+  assert.equal(a.effectiveModel, 'b'); assert.equal(a.effectiveEffort, 'low');
+  const done = a.active.get(id).finished; finish(); await done;
+  await assert.rejects(a.send(id, 'Hi', undefined, { model: 'b', fastMode: true }), /does not expose a fast/);
+ });

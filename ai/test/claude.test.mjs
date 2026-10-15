@@ -10,7 +10,7 @@ const cwd = join(homedir(), 'Library/Application Support/LOLPingYourAI');
 
 // Stands in for the Agent SDK: reads one streamed user message per turn and answers it with a result.
 // `exiting` keeps the stream open after the input ends, as Claude Code does while it shuts down.
-function fakeSdk({ missingSessions = new Set(), exiting } = {}) {
+function fakeSdk({ missingSessions = new Set(), models, exiting } = {}) {
   const calls = [];
   const query = ({ prompt, options }) => {
     const call = { options, prompts: [], interrupted: false }; calls.push(call);
@@ -27,7 +27,7 @@ function fakeSdk({ missingSessions = new Set(), exiting } = {}) {
         yield { type: 'result', subtype: 'success', is_error: false, session_id: session };
       }
     }
-    return Object.assign(run(), { interrupt: async () => { call.interrupted = true; stop(true); }, close() {} });
+    return Object.assign(run(), { ...(models ? { supportedModels: async () => models, applyFlagSettings: async flags => { call.flags = flags; } } : {}), interrupt: async () => { call.interrupted = true; stop(true); }, close() {} });
   };
   return { calls, query };
 }
@@ -104,3 +104,19 @@ test('retreat cancels a late reaction waiting for Claude process shutdown', asyn
   const stopped = a.cancel(id); release(); await stopped; await refused;
   assert.equal(sdk.calls.length, 1, 'Retreat must not start a second turn');
 });
+
+ test('Claude discovers native models and applies selected model, effort and explicit fast setting', async () => {
+  const sdk = fakeSdk({ models: [
+    { value: 'a', displayName: 'Model A', supportsFastMode: true, supportedEffortLevels: ['low', 'high'] },
+    { value: 'b', displayName: 'Model B', supportsFastMode: false, supportedEffortLevels: ['medium', 'high'] },
+  ] });
+  const a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
+  assert.equal((await a.listModels()).models[0].name, 'Model A');
+  const id = await a.create(); let done = completion(a);
+  await a.send(id, 'Work', undefined, { model: 'a' }); await done;
+  assert.equal(sdk.calls.at(-1).options.model, 'a'); assert.deepEqual(sdk.calls.at(-1).flags, { fastMode: false, effortLevel: 'low' });
+  done = completion(a); await a.send(id, 'Work', undefined, { model: 'a', fastMode: true }); await done;
+  assert.equal(sdk.calls.at(-1).flags.fastMode, true);
+  done = completion(a); await a.send(id, 'Work', undefined, { model: 'b', fastMode: false }); await done;
+  assert.equal(sdk.calls.at(-1).options.model, 'b'); assert.deepEqual(sdk.calls.at(-1).flags, { fastMode: false, effortLevel: 'medium' });
+ });

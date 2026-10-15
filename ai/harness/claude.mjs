@@ -28,7 +28,16 @@ export class ClaudeAdapter extends EventEmitter {
   async capabilities() { await this.load(); return { images: true, steer: 'after-current-turn', interrupt: true, desktop: 'project-mcp', context: contextTools, nativeDesktop: false }; }
   async create() { const id = randomUUID(); return id; }
   async resume(id) { this.known.add(id); return id; }
+  async listModels() {
+    const { query } = await this.load();
+    let release; const held = new Promise(resolve => { release = resolve; });
+    async function* input() { await held; }
+    const stream = query({ prompt: input(), options: { cwd: this.cwd, tools: [], mcpServers: {}, strictMcpConfig: true, settings: { fastMode: false }, ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}) } });
+    try { const models = await stream.supportedModels(); return { models: models.map(m => ({ id: m.value, name: m.displayName, fastMode: Boolean(m.supportsFastMode), efforts: m.supportedEffortLevels ?? [] })), defaultModel: models.find(m => m.value === 'default')?.value ?? models[0]?.value }; }
+    finally { release(); stream.close(); }
+  }
   async send(id, prompt, image, settings = {}) {
+    this.selection = { model: '', fastMode: false, ...this.selection, ...settings };
     this.effort = settings.reasoningEffort ?? this.effort ?? 0;
     if (this.active.has(id)) throw new Error('Claude turn is still active');
     const { query } = await this.load();
@@ -37,7 +46,7 @@ export class ClaudeAdapter extends EventEmitter {
     const skill = await readFile(this.skillPath, 'utf8');
     const refuse = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
     this.effectiveEffort = chooseEffort(this.effort, ['low', 'medium', 'high']);
-    const options = { effort: this.effectiveEffort, cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
+    const options = { effort: this.effectiveEffort, ...(this.selection.model ? { model: this.selection.model } : {}), settings: { fastMode: this.selection.fastMode }, cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
       strictMcpConfig: true,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       // Hooks run before settings allow-rules, so a user's global allow list cannot widen this teammate's tools.
@@ -65,10 +74,14 @@ export class ClaudeAdapter extends EventEmitter {
       record.settingsReady = (async () => {
         if (!record.stream.supportedModels || !record.stream.applyFlagSettings) return;
         const models = await record.stream.supportedModels();
-        const model = models.find(m => m.value === this.model) ?? models.find(m => m.value === 'default') ?? models[0];
-        const supported = model?.supportedEffortLevels ?? ['low', 'medium', 'high'];
+        const requested = this.selection.model;
+        const model = requested ? models.find(m => m.value === requested || m.resolvedModel === requested) : models.find(m => m.value === 'default') ?? models[0];
+        if (!model) throw new Error('Selected Claude model is unavailable. Reload the model list.');
+        if (this.selection.fastMode && !model.supportsFastMode) throw new Error('Selected Claude model does not support fast mode');
+        this.effectiveModel = model.resolvedModel ?? model.value; this.effectiveFastMode = this.selection.fastMode;
+        const supported = model.supportsEffort === false ? [] : model.supportedEffortLevels ?? ['low', 'medium', 'high'];
         this.effectiveEffort = chooseEffort(this.effort, supported);
-        if (this.effectiveEffort) await record.stream.applyFlagSettings({ effortLevel: this.effectiveEffort });
+        await record.stream.applyFlagSettings({ fastMode: this.selection.fastMode, ...(this.effectiveEffort ? { effortLevel: this.effectiveEffort } : {}) });
       })();
       record.settingsReady.catch(() => {});
 

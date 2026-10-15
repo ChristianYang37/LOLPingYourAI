@@ -53,6 +53,7 @@ The teammate is your existing Codex, Claude or DSH harness, with its own model, 
 - Live status uses LoL icons: **received → understanding → working / waiting for you → done**. A completion reaction plays through the existing serial visual-and-sound queue.
 - Normal pings queue behind active work; Danger/Retreat interrupt promptly; All In switches targets. Ward/clear-ward never cancel the active task, and reactions append to its conversation.
 - First-run setup checks the harness and macOS permissions, then offers an observation-only test. Settings have **Teammate / Signals / Emotes / Wards** tabs and an English/Chinese switch. Wards show a countdown, cancel and visit-now controls.
+- Selecting a harness loads its own model catalog. Model and fast-mode choices are saved per harness; fast mode is **off by default**, resets to off when changing models, and only appears enabled when the backend advertises support. Changes apply next turn.
 - Reasoning defaults to **0**, the model's lowest supported level. **1** chooses the next level; larger indices clamp to the model's maximum. The effective level is displayed after a turn starts. DSH defaults to thinking on: its indices count enabled levels, with a separate off switch.
 - **DeepSeek Harness (DSH)** is available through ACP. See [installation, free text API setup and verification limits](docs/dsh.md).
 

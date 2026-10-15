@@ -58,6 +58,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   const handlers: Record<string, (args: any) => any> = {
     status: view, config: args => service.configure(args), stop: () => { service.generation++; return service.stop(); },
     doctor: () => desktop.doctor(), connection: async () => adapters[service.config.harness as keyof typeof adapters].capabilities(),
+    models: async args => { if (!Object.hasOwn(adapters, args.harness)) throw new Error('Unknown harness'); return adapters[args.harness as keyof typeof adapters].listModels(); },
     followup: args => service.followup(args), wardAction: args => service.wardAction(args),
     copyReply: () => electron.clipboard.writeText(service.task?.text ?? ''), hideCard: () => companion?.hide(), resizeCard: args => companion?.resize(Boolean(args.expanded)),
     testPing: async () => { await new Promise(resolve => setTimeout(resolve, 3000)); return service.dispatch({ signal: 'missing', point: screen.getCursorScreenPoint(), message: 'Setup test: briefly describe the visible region, then reply with one onmyway ping. Observe only.' }); },
@@ -73,7 +74,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
       service.gate.pause(); const adapter = adapters[service.config.harness as keyof typeof adapters];
       const reference = args.reference ? await icons.reference(args.reference) : undefined;
       const id = await adapter.create();
-      await adapter.send(id, `Create an original transparent emote for this description: ${args.prompt}\nUse an available image-generation tool if present, otherwise design a standalone SVG. Call submit_icon with the result for user review. If an image is attached, use it as the visual reference. Do not use desktop tools or send acknowledgement pings for this request.`, reference, { reasoningEffort: service.config.reasoningEffort, dshThinking: service.config.dshThinking });
+      await adapter.send(id, `Create an original transparent emote for this description: ${args.prompt}\nUse an available image-generation tool if present, otherwise design a standalone SVG. Call submit_icon with the result for user review. If an image is attached, use it as the visual reference. Do not use desktop tools or send acknowledgement pings for this request.`, reference, { reasoningEffort: service.config.reasoningEffort, dshThinking: service.config.dshThinking, model: service.config.modelSelections[service.config.harness]?.model ?? '', fastMode: service.config.modelSelections[service.config.harness]?.fastMode ?? false });
       return { started: true, session: id };
     },
     openAccess: () => { electron.systemPreferences.isTrustedAccessibilityClient(true); return electron.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'); },

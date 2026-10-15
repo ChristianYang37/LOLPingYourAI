@@ -63,20 +63,33 @@ export class CodexAdapter extends EventEmitter {
   }
   async create() {
     await this.connect();
-    const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write' });
+    const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write', serviceTier: 'default' });
     this.loaded.add(result.thread.id); this.models.set(result.thread.id, result.model); return result.thread.id;
   }
   async resume(id) { await this.connect(); if (!this.loaded.has(id)) { const result = await this.rpc('thread/resume', { threadId: id }); this.models.set(id, result.model); this.loaded.add(id); } return id; }
   async list() { await this.connect(); return (await this.rpc('thread/list', { limit: 30, cwd: this.cwd })).data ?? []; }
+  async modelCatalog() {
+    await this.connect(); const models = []; let cursor;
+    do { const page = await this.rpc('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) }); models.push(...(page.data ?? [])); cursor = page.nextCursor; } while (cursor);
+    return models;
+  }
+  fastTier(model) { return (model.serviceTiers ?? []).find(t => ['fast', 'priority'].includes(t.id))?.id ?? (model.additionalSpeedTiers ?? []).find(t => ['fast', 'priority'].includes(t)); }
+  async listModels() { const models = await this.modelCatalog(); return { models: models.map(m => ({ id: m.model, name: m.displayName ?? m.model, fastMode: Boolean(this.fastTier(m)), efforts: m.supportedReasoningEfforts?.map(e => e.reasoningEffort) ?? [] })), defaultModel: models.find(m => m.isDefault)?.model }; }
   async send(id, prompt, image, options = {}) {
     this.effort = options.reasoningEffort ?? this.effort;
-    const catalog = (await this.rpc('model/list', { limit: 100, includeHidden: true })).data ?? [];
-    const model = catalog.find(m => m.model === this.models.get(id) || m.id === this.models.get(id)) ?? catalog.find(m => m.isDefault);
-    if (!model) throw new Error('Cannot determine model reasoning capabilities. Reconnect Codex.');
+    this.selection = { model: '', fastMode: false, ...this.selection, ...options };
+    const catalog = await this.modelCatalog();
+    const model = this.selection.model ? catalog.find(m => m.model === this.selection.model || m.id === this.selection.model) : catalog.find(m => m.isDefault) ?? catalog.find(m => m.model === this.models.get(id));
+    if (!model) throw new Error('Selected Codex model is unavailable. Reload the model list.');
+    const fastTier = this.fastTier(model);
+    if (this.selection.fastMode && !fastTier) throw new Error('Selected Codex model does not advertise fast mode');
+    if (image && model.inputModalities && !model.inputModalities.includes('image')) throw new Error('Selected Codex model does not support images');
     const effort = this.effectiveEffort = chooseEffort(this.effort, (model.supportedReasoningEfforts ?? []).map(e => e.reasoningEffort));
+    const serviceTier = this.selection.fastMode ? fastTier : 'default';
+    this.effectiveModel = model.model; this.effectiveFastMode = this.selection.fastMode;
     const input = [{ type: 'text', text: `$lolping-your-ai\n${prompt}` }, { type: 'skill', name: 'lolping-your-ai', path: this.skillPath }];
     if (image) input.push({ type: 'localImage', path: image });
-    const result = await this.rpc('turn/start', { threadId: id, input, ...(effort ? { effort } : {}) });
+    const result = await this.rpc('turn/start', { threadId: id, input, model: model.model, serviceTier, ...(effort ? { effort } : {}) });
     this.active.set(id, result.turn.id); return result.turn.id;
   }
   async steer(id, prompt, image) {
