@@ -15,6 +15,9 @@ test('disk persistence and older pages retain every record, including same-time 
     await log.flush();
     const next = new ConversationLog(new Store(dir)); await next.init();
     const last = next.page(), middle = next.page({ before: last.entries[0].id }), first = next.page({ before: middle.entries[0].id });
+    next.update('row-0', { text: 'Updated after restart' });
+    assert.equal(next.page({ before: 'row-1' }).entries[0].text, 'Updated after restart');
+    assert.throws(() => next.add({ id: 'row-0' }), /Duplicate/);
     assert.equal(last.entries.length, 100); assert.equal(last.entries.at(-1).phase, 'stopped');
     assert.equal(first.hasMore, false);
     assert.deepEqual([...first.entries, ...middle.entries, ...last.entries].map(r => r.id), log.rows.map(r => r.id));

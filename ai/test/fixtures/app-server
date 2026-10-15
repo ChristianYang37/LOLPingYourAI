@@ -2,13 +2,16 @@
 // `initialized` notification, like the real server, and exits mid-turn when asked so crash handling can be observed.
 const send = message => process.stdout.write(JSON.stringify(message) + '\n');
 let initialized = false;
+const configured = process.env.FIXTURE_MODEL_FILE ? require('node:fs').readFileSync(process.env.FIXTURE_MODEL_FILE, 'utf8').trim() : 'test';
 require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
   const message = JSON.parse(line);
   if (message.method === 'initialized') { initialized = true; return; }
   if (message.id === undefined) return;
   if (message.method === 'initialize') return send({ id: message.id, result: {} });
   if (!initialized) return send({ id: message.id, error: { message: 'Not initialized' } });
+  if (message.method === 'config/read') return send({ id: message.id, result: {config:{model:configured}} });
   if (message.method === 'model/list') return send({ id: message.id, result: { data: [{ model: 'test', isDefault: true, supportedReasoningEfforts: [{reasoningEffort:'low'}, {reasoningEffort:'high'}] }] } });
+  if (message.method === 'thread/resume') return send({ id: message.id, result: { thread: { id: message.params.threadId }, model: configured } });
   if (message.method === 'thread/start') return send({ id: message.id, result: { thread: { id: 'thread-1' } } });
   if (message.method === 'turn/start') {
     send({ id: message.id, result: { turn: { id: 'turn-1' } } });

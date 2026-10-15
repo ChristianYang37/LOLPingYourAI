@@ -8,7 +8,7 @@ test('newly created or already loaded Codex thread is not resumed again', async 
   const calls = []; a.connect = async () => {};
   a.rpc = async (method, params) => { calls.push({ method, params }); return { thread: { id: 'fresh' } }; };
   const id = await a.create(); await a.resume(id); await a.resume('persisted'); await a.resume('persisted');
-  assert.deepEqual(calls.map(c => c.method), ['thread/start', 'thread/resume']);
+  assert.deepEqual(calls.map(c => c.method), ['thread/start', 'model/list', 'config/read', 'thread/resume']);
 });
 
 test('Codex interrupt stays pending until completion is confirmed', async () => {
@@ -35,4 +35,23 @@ test('Codex app-server exit fails active turns instead of leaving waiters hangin
   await assert.doesNotReject(a.cancel(thread)); // Nothing left to interrupt.
   assert.equal(await a.create(), 'thread-1'); // Reconnects with a fresh app-server.
   a.close();
+});
+
+
+test('explicit refresh reloads changed native configuration without replacing thread identity', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { join } = await import('node:path'); const { tmpdir } = await import('node:os');
+  const dir = await mkdtemp(join(tmpdir(), 'lolping-codex-refresh-')), file = join(dir, 'model');
+  const a = fakeServer(); a.mcp.env.FIXTURE_MODEL_FILE = file; const failures = [];
+  a.on('failure', e => failures.push(e.message));
+  try {
+    await writeFile(file, 'custom-before');
+    assert.equal((await a.listModels()).defaultModel, 'custom-before');
+    const id = await a.create();
+    await writeFile(file, 'custom-after');
+    assert.equal((await a.listModels()).defaultModel, 'custom-before');
+    assert.equal((await a.listModels({ refresh: true })).defaultModel, 'custom-after');
+    await a.resume(id); assert.equal(a.models.get(id), 'custom-after');
+    assert.deepEqual(failures, []);
+  } finally { a.close(); await rm(dir, { recursive: true, force: true }); }
 });
