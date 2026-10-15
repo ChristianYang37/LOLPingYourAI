@@ -13,7 +13,7 @@ export function validateSvg(svg) {
 
 export class IconCandidates {
   constructor(directory) { this.directory = directory; }
-  async submit({ name, svg, pngBase64 }, source = 'image-tool') {
+  async submit({ name, svg, pngBase64 }, source = 'image-tool', metadata = {}) {
     if (typeof name !== 'string' || name.length > 80) throw new Error('Invalid icon name');
     let bytes, method;
     if (svg) { bytes = Buffer.from(validateSvg(svg)); method = 'vector-generated'; }
@@ -21,7 +21,7 @@ export class IconCandidates {
     const png = await sharp(bytes, { limitInputPixels: 8192 * 8192 }).resize(512, 512, { fit: 'contain', background: '#00000000' }).png().toBuffer();
     const id = randomUUID(); await mkdir(this.directory, { recursive: true, mode: 0o700 });
     await writeFile(join(this.directory, `${id}.png`), png, { mode: 0o600 });
-    const candidate = { id, name, method }; await writeFile(join(this.directory, `${id}.json`), JSON.stringify(candidate), { mode: 0o600 });
+    const candidate = { id, name, method, referenceProvided: metadata.referenceProvided === true }; await writeFile(join(this.directory, `${id}.json`), JSON.stringify(candidate), { mode: 0o600 });
     return { ...candidate, awaitingUserPreview: true };
   }
   async reference(pngBase64) {

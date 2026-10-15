@@ -49,7 +49,10 @@
 
 ## 队友交互
 
+- 应用默认打开聊天首页，展示完整回复、任务状态和固定输入框；右上角「设置」切换到分类配置，返回时保留输入草稿。
+- 也可以在聊天首页直接打字开启会话，无需先 ping，也不依赖桌面录屏权限；需要画面上下文时再 ping 对应区域。
 - 目标附近显示轻量回复卡，不主动抢焦点；可以展开、复制、追问和回答澄清。
+- Agent 反 ping 和表情默认停留 **6 秒**，可在「信号与声音 → AI 反 ping 持续时间」调整为 3–15 秒。前一条图标、音效都结束后才显示下一条，音效只播放一次。
 - 状态用 LoL 图标显示：**已收到 → 正在理解 → 正在执行／等你回答 → 已完成**。完成反应沿用图标与音效串行播放队列。
 - 普通信号排队，警告／撤退立即中断，交战切换目标；插眼／排眼不打断当前任务，表情追加到原会话。
 - 首次使用引导检查连接与权限，提供只读测试。设置分成**队友／信号／表情／回访**四页，并可切换中英文；回访支持倒计时、取消和立即回访。
@@ -96,9 +99,11 @@ sequenceDiagram
   AI-->>App: 确认已取消
 ```
 
-沿用 lolPing 的原生输入助手，负责按下、拖动、松开和取消。确认后的 ping 会截图，并交给一个**持续存在的队友会话**：多次 ping 共用同一线程，闲置 2 小时后带着简短交接安全换新。agent 通过本地 MCP 服务工作，可用工具有 `get_context`、`screenshot`、`desktop_action`、`reply_ping`、`save_handoff`、`ward` 和 `submit_icon`。所有桌面操作经同一个闸门串行执行，一次纠正会让此前的旧操作全部失效。详见 [docs/architecture.md](docs/architecture.md)。
+沿用 lolPing 的原生输入助手，负责按下、拖动、松开和取消。确认后的 ping 会截图，并交给一个**持续存在的队友会话**：多次 ping 和应用重启后继续使用同一 harness 会话，不再按闲置时间刷新，上下文管理交给 harness。文字、信号、agent 回复与反 ping 在本地保存，并在聊天主窗口显示；点击「查看更早记录」可翻看历史。agent 通过本地 MCP 服务工作，可用工具有 `get_context`、`screenshot`、`desktop_action`、`reply_ping`、`save_handoff` 和 `ward`；`submit_icon` 只提供给用户显式发起的独立表情生成任务。所有桌面操作经同一个闸门串行执行，一次纠正会让此前的旧操作全部失效。详见 [docs/architecture.md](docs/architecture.md)。
 
 ## 快速开始（macOS）
+
+上述聊天主页与审核修复已进入当前源码；已有 v0.1.1 安装包早于本次整合。新版本发布前，请从源码构建体验这些变化。
 
 1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.1) 下载 **LOLPingYourAI-0.1.1-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
 2. **连接队友**：安装 [Codex CLI](https://developers.openai.com/codex/cli/) 并执行 `codex login`；Codex 桌面应用自带的 CLI 会被自动找到。Claude 目前为实验性支持（见[平台状态](#平台状态)）。
@@ -144,14 +149,14 @@ sequenceDiagram
 
 ## 配置与命令行
 
-默认值：关注区域 **512×512** 逻辑像素，闲置 **2 小时**后刷新会话，插眼 **0.5 小时**后回访。可以在设置中修改，也可以在应用运行时用终端修改：
+默认值：关注区域 **512×512** 逻辑像素，插眼 **0.5 小时**后回访。可以在设置中修改，也可以在应用运行时用终端修改：
 
 ```sh
 node ai/cli.mjs help
 node ai/cli.mjs doctor
 node ai/cli.mjs status
 node ai/cli.mjs ping '{"signal":"missing","point":{"x":640,"y":400}}'
-node ai/cli.mjs config '{"regionSize":512,"sessionHours":2,"wardHours":0.5}'
+node ai/cli.mjs config '{"regionSize":512,"wardHours":0.5}'
 node ai/cli.mjs bind '{"harness":"codex","summary":"任务目标、进度、下一步"}'
 node ai/cli.mjs stop
 ```
@@ -184,12 +189,15 @@ pnpm dev
 pnpm typecheck
 pnpm test:helper                                # C++ 输入助手
 pnpm test                                       # Vitest + AI 桥接测试
+pnpm test:acceptance                            # 跨平台验收工具的协议测试
 pnpm build && pnpm exec electron tools/check-assets.cjs
 pnpm exec electron tools/check-agent-queue.cjs  # 真实覆盖层 + Web Audio 播放队列
 pnpm exec electron tools/test-board.cjs         # 手动测试用的一次性窗口
 pnpm dist:mac                                   # 在 release/ 生成 Apple Silicon DMG
 pnpm dist                                       # Windows x64 安装包（需在 Windows 上执行）
 ```
+
+可复用的[验收工具](tools/acceptance/README.md)通过本地桥接支持 Codex、Claude、DSH，诊断输出仅保存在本地。尚未解决的原生输入和界面问题见 [Claude 问题审核与修复方案](docs/claude-acceptance-audit.md)。
 
 | 路径 | 内容 |
 | --- | --- |

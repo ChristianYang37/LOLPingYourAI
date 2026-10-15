@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { validateConfig, signalFor, signals } from './config.mjs';
 import { ActionGate } from './gate.mjs';
 import { Wards } from './wards.mjs';
+import { ConversationLog } from './conversation.mjs';
 
 // Screenshot tool results arrive as base64 images; keep them out of the history the settings window polls.
 export const compact = value => typeof value === 'string' ? (value.length > 2000 && /^[A-Za-z0-9+/=\s]+$/.test(value.slice(0, 2000)) ? `[${value.length} characters of binary data omitted]` : value)
@@ -19,9 +20,10 @@ export class Teammate extends EventEmitter {
           const text = event.method === 'item/agentMessage/delta' ? event.params.delta : ['claude/message', 'dsh/message'].includes(event.method) && event.params.type === 'assistant' ? event.params.message?.content?.filter(c => c.type === 'text').map(c => c.text).join('') : '';
           if (event.method === 'item/started' && event.params.item?.type === 'agentMessage' && event.params.item.phase === 'final_answer') this.task.text = '';
           if (event.method === 'item/completed' && event.params.item?.type === 'agentMessage' && event.params.item.phase === 'final_answer') this.task.text = event.params.item.text;
-          if (text) this.task.text = (this.task.text + text).slice(-30000);
+          if (text) this.task.text = this.task.text + text;
           if (event.method === 'item/started' && ['commandExecution', 'fileChange'].includes(event.params?.item?.type)) this.phase('working');
         }
+        if (owns && this.task) this.syncReply();
         if (event.method === 'serverRequest/resolved') this.approvals = this.approvals.filter(p => p.harness !== name || p.request.id !== event.params.requestId);
         if (event.method === 'item/agentMessage/delta') {
           const last = this.history.at(-1);
@@ -48,6 +50,9 @@ export class Teammate extends EventEmitter {
     this.config = validateConfig(await this.store.read('ai-config', {}));
     this.sessions = await this.store.read('ai-sessions', {});
     this.seen = new Set(await this.store.read('ai-events', []));
+    for (const session of Object.values(this.sessions)) delete session.expired;
+    this.conversation = new ConversationLog(this.store, { now: this.now, onError: error => this.notice(`Could not save conversation: ${error.message}`) });
+    await this.conversation.init();
     this.outcomes = new Map();
     this.wards = new Wards(this.store, { now: this.now, available: async () => !this.processing && !this.busy() && await this.desktop.available(), notify: text => this.notice(text), visit: async item => {
       const result = await this.dispatch({ source: 'timer', signal: 'missing', target: item.target, harness: item.harness, message: 'This is the one-time ward follow-up. Inspect current progress and report changes. Do not edit.' });
@@ -56,7 +61,15 @@ export class Teammate extends EventEmitter {
     } });
     await this.wards.init();
   }
-  phase(phase) { if (this.task) { this.task.phase = phase; this.task.updatedAt = this.now(); this.emit('change'); } }
+  syncReply() {
+    if (this.task?.replyId) this.conversation.update(this.task.replyId, { text: this.task.text, phase: this.task.phase, error: this.task.error, target: this.task.target ? { app: this.task.target.app, title: this.task.target.title } : undefined });
+  }
+  phase(phase) { if (this.task) { this.task.phase = phase; this.task.updatedAt = this.now(); this.syncReply(); this.emit('change'); } }
+  async displayReply(args, harness = this.context?.harness) {
+    await this.desktop.reply(args);
+    this.conversation.add({ role: 'agent', kind: 'ping', harness, signal: args.signal, text: args.caption ?? '', target: args.target ? { app: args.target.app, title: args.target.title } : undefined });
+    await this.conversation.flush(); this.emit('change');
+  }
   pump() {
     if (this.processing || this.busy() || !this.pendingPings.length || !this.pendingPings[0].ready) return;
     const { event, signal } = this.pendingPings.shift();
@@ -73,13 +86,13 @@ export class Teammate extends EventEmitter {
   }
   notice(text) { this.emit('notice', text); }
   busy() { return Object.values(this.adapters).some(a => a.active.size > 0); }
-  status() { return { config: this.config, effectiveEffort: this.adapters[this.config.harness]?.effectiveEffort, effectiveModel: this.adapters[this.config.harness]?.effectiveModel, effectiveFastMode: this.adapters[this.config.harness]?.effectiveFastMode, sessions: this.sessions, busy: this.busy() || this.processing, task: this.task, pending: this.pendingPings.map(({ event }) => ({ id: event.id, signal: event.signal, target: event.target })), context: this.context, wards: this.wards?.items ?? [], history: this.history, approvals: this.approvals, signals }; }
+  status() { return { config: this.config, effectiveEffort: this.adapters[this.config.harness]?.effectiveEffort, observedModel: this.adapters[this.config.harness]?.observedModel, settingsAcknowledged: this.adapters[this.config.harness]?.settingsAcknowledged, effectiveModel: this.adapters[this.config.harness]?.effectiveModel, effectiveFastMode: this.adapters[this.config.harness]?.effectiveFastMode, sessions: this.sessions, busy: this.busy() || this.processing, task: this.task, pending: this.pendingPings.map(({ event }) => ({ id: event.id, signal: event.signal, target: event.target })), context: this.context, wards: this.wards?.items ?? [], history: this.history, conversation: this.conversation?.page(), approvals: this.approvals, signals }; }
   async configure(patch) { this.config = validateConfig({ ...this.config, ...patch }); await this.store.write('ai-config', this.config); this.emit('change'); return this.config; }
   async dispatch(raw) {
     if (raw.source === 'agent' || raw.source === 'remote') return { ignored: true };
     const id = raw.id ?? randomUUID();
     if (this.seen.has(id)) return { duplicate: true };
-    const signal = signalFor(this.config, raw.signal);
+    const signal = raw.signal === 'chat' ? { mode: 'chat', prompt: 'Respond to the user’s text message.' } : signalFor(this.config, raw.signal);
     this.seen.add(id); if (this.seen.size > 1000) this.seen.delete(this.seen.values().next().value);
     const urgent = ['stop', 'interrupt'].includes(signal.mode) || raw.signal === 'allin';
     if (urgent) { this.generation++; this.gate.pause(); this.pendingPings.length = 0; }
@@ -89,17 +102,18 @@ export class Teammate extends EventEmitter {
     await this.store.write('ai-events', [...this.seen]);
     const session = this.sessions[event.harness];
     if (session && event.source === 'user') {
-      session.expired ||= this.now() - session.lastHumanPing > this.config.sessionHours * 3600000;
       session.lastHumanPing = this.now(); await this.saveSessions();
     }
     await stopping;
+    this.conversation.add({ id: event.id, role: event.source === 'timer' ? 'timer' : 'user', kind: signal.mode === 'chat' || event.followup ? 'text' : 'ping', harness: event.harness, signal: event.signal, text: event.message ?? '', target: event.target ? { app: event.target.app, title: event.target.title } : undefined });
+    await this.conversation.flush(); this.emit('change');
     if (event.generation !== this.generation) return { superseded: true };
     if (signal.mode === 'stop') { this.phase('stopped'); this.notice('Stopped. Control returned to you.'); return { stopped: true }; }
     if (['ward', 'unward'].includes(signal.mode)) {
       const target = event.target ?? (this.desktop.locate ? await this.desktop.locate(event.point) : (await this.desktop.capture(event.point, this.config.regionSize)).target);
-      if (signal.mode === 'unward') { const cancelled = await this.wards.cancel(target.id); this.emit('change'); await this.desktop.reply({ target, signal: 'cleared', at: 'target', source: 'agent' }); return { cancelled }; }
+      if (signal.mode === 'unward') { const cancelled = await this.wards.cancel(target.id); this.emit('change'); await this.displayReply({ target, signal: 'cleared', at: 'target', source: 'agent' }, event.harness); return { cancelled }; }
       const ward = await this.wards.add(target, this.config.wardHours, event.harness);
-      await this.desktop.reply({ target, signal: 'vision', at: 'target', source: 'agent', caption: 'Ward placed' }); this.emit('change'); return ward;
+      await this.displayReply({ target, signal: 'vision', at: 'target', source: 'agent', caption: 'Ward placed' }, event.harness); this.emit('change'); return ward;
     }
     if (signal.mode === 'emotion' && session && this.adapters[event.harness]?.active.has(session.id)) {
       if (event.signal === 'bait' && this.config.banter) session.teasePending = true;
@@ -111,7 +125,7 @@ export class Teammate extends EventEmitter {
       if (this.pendingPings.length >= 20) throw new Error('Ping queue is full. Wait or retreat to clear it.');
       // Anchor now; capture fresh pixels when this queued ping actually starts.
       const entry = { event, signal, ready: false }; this.pendingPings.push(entry); this.emit('change');
-      try { event.target ??= this.desktop.locate ? await this.desktop.locate(event.point) : (await this.desktop.capture(event.point, this.config.regionSize)).target; }
+      try { if (signal.mode !== 'chat') event.target ??= this.desktop.locate ? await this.desktop.locate(event.point) : (await this.desktop.capture(event.point, this.config.regionSize)).target; }
       catch (error) { this.pendingPings = this.pendingPings.filter(p => p !== entry); this.emit('change'); this.pump(); throw error; }
       if (event.generation !== this.generation) return { superseded: true };
       entry.ready = true; this.emit('change'); this.pump();
@@ -132,25 +146,33 @@ export class Teammate extends EventEmitter {
     const harness = event.harness ?? this.config.harness, adapter = this.adapters[harness];
     if (!adapter) throw new Error('Harness is unavailable');
     const previous = this.sessions[harness];
-    const expired = previous && (previous.expired || (event.source === 'user' && this.now() - (previous.lastHumanPing ?? 0) > this.config.sessionHours * 3600000));
     current(); this.gate.pause();
-    this.task = { id: event.id, phase: 'received', signal: event.signal, point: event.point, target: event.target, text: '', startedAt: this.now() }; this.emit('change');
-    const capture = await this.desktop.capture(event.target ?? event.point, this.config.regionSize, Boolean(event.target));
+    this.task = { id: event.id, replyId: this.conversation.add({ role: 'agent', kind: 'text', harness, contextId: event.id, text: '', phase: 'received' }).id, phase: 'received', signal: event.signal, point: event.point, target: event.target, text: '', startedAt: this.now() }; this.emit('change');
+    const capture = signal.mode === 'chat' ? {} : await this.desktop.capture(event.target ?? event.point, this.config.regionSize, Boolean(event.target));
     current(); this.task.target = capture.target; this.phase('understanding');
     const context = this.context = { id: event.id, source: event.source, signal: event.signal, mode: signal.mode, time: this.now(), harness, ...capture, config: this.config };
     let session = previous;
-    if (!session?.id || expired) {
+    if (!session?.id) {
       const id = await adapter.create();
       session = this.sessions[harness] = { id, lastHumanPing: event.source === 'user' ? this.now() : previous?.lastHumanPing ?? 0, summary: previous?.summary ?? '', goal: previous?.goal ?? '', target: capture.target };
     } else { await adapter.resume(session.id); if (event.source === 'user') session.lastHumanPing = this.now(); }
     current();
     session.target = capture.target;
     await this.saveSessions();
+    this.conversation.update(event.id, { sessionId: session.id, target: capture.target ? { app: capture.target.app, title: capture.target.title } : undefined });
+    this.conversation.update(this.task.replyId, { sessionId: session.id });
+    await this.conversation.flush();
     current();
     if (['execute', 'interrupt'].includes(signal.mode)) this.gate.enable();
     if (event.signal === 'bait' && this.config.banter) session.teasePending = true;
-    const prompt = [
-      `LOLPingYourAI event ${context.id}. ${signal.prompt}`, event.message ?? '',
+    const prompt = signal.mode === 'chat' ? [
+      `LOLPingYourAI text conversation. Context ID: ${context.id}.`,
+      event.message,
+      `Handoff: ${session.summary || 'No previous summary.'}`,
+      'Call get_context. This context has mode=chat and no desktop target or screenshot. Answer in the chat using your existing harness capabilities. Do not capture the desktop, operate a window, place wards or send desktop pings. If visual context is needed, ask the user to ping the relevant area. Save a concise handoff when useful.',
+    ].join('\n') : [
+      `LOLPingYourAI event ${context.id}. ${signal.prompt}`,
+      'Separate text visible in the current screenshot from history or inference. Do not invent clipped text; read the source or ask when it matters.', event.message ?? '',
       `Current configuration: ${JSON.stringify(this.config)}`,
       `Context: ${JSON.stringify({ contextId: context.id, signal: event.signal, source: event.source, target: capture.target, region: capture.region })}`,
       `Handoff: ${session.summary || 'No previous summary. Infer only what the screenshot supports; ask if the task goal is unclear.'}`,
@@ -175,17 +197,19 @@ export class Teammate extends EventEmitter {
   checkContext(id) { if (!this.context || this.context.id !== id) throw new Error('Stale ping context. Stop using the previous target.'); return this.context; }
   async reply({ signal, at = 'target', caption = '', contextId }) {
     const context = this.checkContext(contextId);
-    if (!signals[signal]) throw new Error('Unknown reply signal');
+    if (!signals[signal]) throw new Error(`Unknown reply signal. Use one of: ${Object.keys(signals).join(', ')}`);
     if (!this.config.banter && signal === 'bait') return { suppressed: true };
     if (this.task) { if (signal === 'missing') this.phase('waiting'); else if (signal === 'allin') this.phase('working'); if (['like', 'celebrate', 'bait'].includes(signal)) this.task.reacted = true; }
-    await this.desktop.reply({ signal, target: context.target, at, caption: String(caption).slice(0, 100), source: 'agent' });
+    if (!context.target) return { displayed: false, reason: 'Text conversation has no desktop target' };
+    await this.displayReply({ signal, target: context.target, at, caption: String(caption).slice(0, 100), source: 'agent' });
     return { displayed: true };
   }
   async action(args) {
     const context = this.checkContext(args.contextId), epoch = this.gate.epoch;
-    return this.gate.run(async () => { this.checkContext(args.contextId); this.phase('working'); return this.desktop.action(args, context); }, epoch);
+    if (!context.target) throw new Error('Ping a window before requesting desktop actions');
+    return this.gate.run(async signal => { this.checkContext(args.contextId); this.phase('working'); return this.desktop.action(args, context, signal); }, epoch);
   }
-  async screenshot(contextId) { const context = this.checkContext(contextId); const capture = await this.desktop.capture(context.target, this.config.regionSize, true); this.checkContext(contextId); Object.assign(context, capture); return capture; }
+  async screenshot(contextId) { const context = this.checkContext(contextId); if (!context.target) throw new Error('Ping a window before requesting a screenshot'); const capture = await this.desktop.capture(context.target, this.config.regionSize, true); this.checkContext(contextId); Object.assign(context, capture); return capture; }
   async handoff({ contextId, summary, goal = '' }) {
     const context = this.checkContext(contextId);
     if (typeof summary !== 'string' || summary.length > 4000 || typeof goal !== 'string' || goal.length > 1000) throw new Error('Invalid handoff');
@@ -194,12 +218,12 @@ export class Teammate extends EventEmitter {
   }
   async onDelivered(harness) {
     const session = this.sessions[harness], context = this.context, task = this.task;
-    if (!task || task.phase !== 'done' || context?.harness !== harness) return;
+    if (!context?.target || !task || task.phase !== 'done' || context?.harness !== harness) return;
     const comeback = session?.teasePending && this.config.banter;
     if (session?.teasePending) { session.teasePending = false; await this.saveSessions(); }
     if (!task.reacted || comeback) {
       task.reacted = true;
-      await this.desktop.reply({ signal: comeback ? 'bait' : 'like', target: context.target, at: 'target', caption: comeback ? 'Your move 😏' : 'Done', source: 'agent' });
+      await this.displayReply({ signal: comeback ? 'bait' : 'like', target: context.target, at: 'target', caption: comeback ? 'Your move 😏' : 'Done', source: 'agent' });
     }
   }
   async bind({ harness, id, summary }) {
@@ -213,15 +237,25 @@ export class Teammate extends EventEmitter {
     this.sessions[harness] = { id, summary: String(summary ?? this.sessions[harness]?.summary ?? '').slice(0, 4000), lastHumanPing: this.now() };
     await this.saveSessions(); this.emit('change'); return { id, binding: owned ? 'owned-session' : 'handoff' };
   }
+  async message({ contextId, text }) {
+    if (typeof text !== 'string' || !text.trim() || text.length > 12000) throw new Error('Enter 1–12000 characters');
+    if (contextId) {
+      const context = this.checkContext(contextId);
+      if (context.harness === this.config.harness) return this.followup({ contextId, text });
+    }
+    return this.dispatch({ signal: 'chat', message: text, harness: this.config.harness });
+  }
   async followup({ contextId, text }) {
     const context = this.checkContext(contextId);
     if (typeof text !== 'string' || !text.trim() || text.length > 12000) throw new Error('Enter 1–12000 characters');
     const session = this.sessions[context.harness], adapter = this.adapters[context.harness];
     if (this.busy() && adapter.active.has(session.id)) {
       session.lastHumanPing = this.now(); await this.saveSessions(); this.phase('understanding');
-      await adapter.steer(session.id, `User follow-up for context ${contextId}: ${text}`); return { delivered: true };
+      await adapter.steer(session.id, `User follow-up for context ${contextId}: ${text}`);
+      this.conversation.add({ role: 'user', kind: 'text', harness: context.harness, sessionId: session.id, text });
+      await this.conversation.flush(); this.emit('change'); return { delivered: true };
     }
-    return this.dispatch({ signal: context.signal, target: context.target, harness: context.harness, message: text });
+    return this.dispatch({ signal: context.signal, target: context.target, harness: context.harness, message: text, followup: true });
   }
   async wardAction({ id, action }) { const result = await this.wards.update(id, action); this.emit('change'); if (action === 'now') void this.wards.tick(); return result; }
   async approve({ harness, id, allow, answers }) {
@@ -251,5 +285,5 @@ export class Teammate extends EventEmitter {
     if (!supported.includes(request.method)) throw new Error('This approval requires the native harness UI');
     this.adapters[harness].respond(id, { decision: allow ? 'accept' : 'decline' }); this.approvals.splice(index, 1); this.emit('change'); return { answered: true };
   }
-  close() { this.gate.pause(); for (const adapter of Object.values(this.adapters)) adapter.close(); }
+  close() { void this.conversation?.flush().catch(error => this.notice(error.message)); this.gate.pause(); for (const adapter of Object.values(this.adapters)) adapter.close(); }
 }

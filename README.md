@@ -49,7 +49,10 @@ The teammate is your existing Codex, Claude or DSH harness, with its own model, 
 
 ## Teammate experience
 
+- The app opens to a dedicated chat home with full replies, a fixed composer and task status. Use the Settings button for configuration; switching back keeps your draft.
+- You can also type directly on the chat home to start a conversation. Text-only chat needs no desktop capture permissions; ping a region when you want to share visual context.
 - A small reply card appears near the target without requesting focus. Expand, copy, ask a follow-up or answer a clarification there.
+- Agent pings and emotes stay visible for **6 seconds** by default. Adjust **Signals & Sound → AI reply duration** (3–15 seconds). Replies wait for both the preceding visual and sound to finish; sounds play once.
 - Live status uses LoL icons: **received → understanding → working / waiting for you → done**. A completion reaction plays through the existing serial visual-and-sound queue.
 - Normal pings queue behind active work; Danger/Retreat interrupt promptly; All In switches targets. Ward/clear-ward never cancel the active task, and reactions append to its conversation.
 - First-run setup checks the harness and macOS permissions, then offers an observation-only test. Settings have **Teammate / Signals / Emotes / Wards** tabs and an English/Chinese switch. Wards show a countdown, cancel and visit-now controls.
@@ -96,9 +99,11 @@ sequenceDiagram
   AI-->>App: cancellation confirmed
 ```
 
-The native helper inherited from lolPing handles press, drag, release and cancel. A confirmed ping is captured and passed to a **persistent teammate session**. The same thread is kept between pings and is safely replaced after 2 idle hours, carrying a short handoff. The agent then works through a local MCP server: `get_context`, `screenshot`, `desktop_action`, `reply_ping`, `save_handoff`, `ward` and `submit_icon`. One action gate serializes desktop operations, and a correction invalidates every older one. Details are in [docs/architecture.md](docs/architecture.md).
+The native helper inherited from lolPing handles press, drag, release and cancel. A confirmed ping is captured and passed to a **persistent teammate session**. The same harness thread is resumed between pings and after app restarts, with no app-imposed idle expiry. Context management stays with the harness. Your messages, signals, agent replies and reverse pings are saved locally and shown in the chat window; use “Load earlier records” for older entries. The agent then works through a local MCP server: `get_context`, `screenshot`, `desktop_action`, `reply_ping`, `save_handoff` and `ward`. `submit_icon` is available only to a separate, explicitly requested icon-generation job. One action gate serializes desktop operations, and a correction invalidates every older one. Details are in [docs/architecture.md](docs/architecture.md).
 
 ## Quick start (macOS)
+
+The chat-first interface and review fixes described above are in the current source. Existing v0.1.1 release installers predate this integration; build from source to try these changes until a new release is published.
 
 1. **Install.** Download **LOLPingYourAI-0.1.1-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.1) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
 2. **Connect a teammate.** Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) (`codex login`). The CLI bundled with the Codex desktop app is found automatically. Claude is experimental (see [Platform status](#platform-status)).
@@ -144,14 +149,14 @@ What was actually exercised, and what wasn't, is recorded in [docs/verification.
 
 ## Configuration and CLI
 
-Defaults: focus square **512×512** logical pixels, session refresh after **2 h** idle, ward delay **0.5 h**. Change them in settings or from a terminal while the app runs:
+Defaults: focus square **512×512** logical pixels, ward delay **0.5 h**. Change them in settings or from a terminal while the app runs:
 
 ```sh
 node ai/cli.mjs help
 node ai/cli.mjs doctor
 node ai/cli.mjs status
 node ai/cli.mjs ping '{"signal":"missing","point":{"x":640,"y":400}}'
-node ai/cli.mjs config '{"regionSize":512,"sessionHours":2,"wardHours":0.5}'
+node ai/cli.mjs config '{"regionSize":512,"wardHours":0.5}'
 node ai/cli.mjs bind '{"harness":"codex","summary":"Goal, progress, next step"}'
 node ai/cli.mjs stop
 ```
@@ -184,12 +189,15 @@ pnpm dev
 pnpm typecheck
 pnpm test:helper                                # C++ input helper
 pnpm test                                       # Vitest + AI bridge tests
+pnpm test:acceptance                            # Portable acceptance-tool protocol tests
 pnpm build && pnpm exec electron tools/check-assets.cjs
 pnpm exec electron tools/check-agent-queue.cjs  # real overlay + Web Audio queue
 pnpm exec electron tools/test-board.cjs         # disposable window for manual tests
 pnpm dist:mac                                   # Apple Silicon DMG in release/
 pnpm dist                                       # Windows x64 installer (run on Windows)
 ```
+
+Reusable [acceptance tools](tools/acceptance/README.md) support Codex, Claude and DSH through the local bridge, with local-only diagnostic output. See the [Claude findings and repair plan](docs/claude-acceptance-audit.md) for the remaining native-input and UI issues.
 
 | Path | What lives there |
 | --- | --- |

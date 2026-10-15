@@ -38,6 +38,8 @@ export interface Settings {
   toggleHotkey: Hotkey;
   pingSizePx: number;
   pingDurationS: number;
+  /** Agent replies, including emotes, use their own display duration. */
+  agentPingDurationS: number;
   volume: number;
   muted: boolean;
   tickSound: boolean;
@@ -89,6 +91,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
   pingSizePx: 110,
   pingDurationS: 3.2,
+  agentPingDurationS: 6,
   volume: 70,
   muted: false,
   tickSound: true,
@@ -116,6 +119,7 @@ export const LIMITS = {
   dragThresholdPx: { min: 2, max: 40, step: 1 },
   pingSizePx: { min: 60, max: 220, step: 1 },
   pingDurationS: { min: 1, max: 8, step: 0.1 },
+  agentPingDurationS: { min: 3, max: 15, step: 0.5 },
   volume: { min: 0, max: 100, step: 1 },
   incomingPingLimit: { min: 0, max: 20, step: 1 },
   emoteSizePx: { min: 80, max: 300, step: 1 },
@@ -227,6 +231,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     toggleHotkey,
     pingSizePx: num(r.pingSizePx, 'pingSizePx'),
     pingDurationS: num(r.pingDurationS, 'pingDurationS'),
+    agentPingDurationS: num(r.agentPingDurationS, 'agentPingDurationS'),
     volume: num(r.volume, 'volume'),
     muted: bool(r.muted, 'muted'),
     tickSound: bool(r.tickSound, 'tickSound'),
@@ -280,12 +285,12 @@ export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platfor
 
 export type OverlaySettings = Pick<
   Settings,
-  'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
+  'pingSizePx' | 'pingDurationS' | 'agentPingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
-  pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
+  pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, agentPingDurationS: s.agentPingDurationS, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
   wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),

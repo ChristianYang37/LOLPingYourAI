@@ -1,6 +1,11 @@
 import Cocoa
 import ApplicationServices
 
+// SIGTERM cancels waits and the next input chunk; a key sequence already in
+// flight finishes releasing its modifiers before checking again.
+var cancellationRequested = false
+signal(SIGTERM) { _ in cancellationRequested = true }
+
 // Never inherit a user's held modifiers or re-trigger the ping input helper.
 func postInput(_ event: CGEvent, flags: CGEventFlags = []) {
     event.flags = flags
@@ -63,11 +68,21 @@ if op == "doctor" {
             }
             // WebKit can publish the focused window before its input focus has settled.
             let needsInputFocus = op == "type" || op == "key"
-            let deadline = Date().addingTimeInterval(1.0)
+            var requestedTree = false
+            var triedTree = false
+            var deadline = Date().addingTimeInterval(1.0)
             var stableSince: Date?
             repeat {
+                guard !cancellationRequested else { fail("Desktop action cancelled") }
                 if hasTargetFocus(ax, Int32(number(w, "pid")), requireInput: needsInputFocus) { if stableSince == nil { stableSince = Date() } }
-                else { stableSince = nil }
+                else {
+                    stableSince = nil
+                    if needsInputFocus && !triedTree && lastFocusFailure == "no focused control" {
+                        triedTree = true
+                        requestedTree = requestInputAccessibility(ax, Int32(number(w, "pid")))
+                        if requestedTree { deadline = Date().addingTimeInterval(4.0) }
+                    }
+                }
                 if let since = stableSince, Date().timeIntervalSince(since) >= 0.12 { break }
                 RunLoop.current.run(until: Date().addingTimeInterval(0.02))
             } while Date() < deadline
@@ -76,20 +91,61 @@ if op == "doctor" {
             guard let fresh = windows(exclude).first(where: { ($0["id"] as? String) == w["id"] as? String && number($0, "pid") == number(w, "pid") }) else { fail("Target window closed or changed") }
             if op == "resize" {
                 guard let b = args["bounds"] as? [String: Any] else { fail("Missing window bounds") }
-                var point = CGPoint(x: number(b, "x"), y: number(b, "y")); var size = CGSize(width: number(b, "width"), height: number(b, "height"))
-                let p = AXValueCreate(.cgPoint, &point)!, s = AXValueCreate(.cgSize, &size)!
-                guard AXUIElementSetAttributeValue(ax, kAXSizeAttribute as CFString, s) == .success else { fail("This window cannot be resized") }
-                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-                guard AXUIElementSetAttributeValue(ax, kAXPositionAttribute as CFString, p) == .success else { fail("This window cannot be moved") }
-                let resizeDeadline = Date().addingTimeInterval(0.7)
-                var reached = false
-                repeat {
-                    if let actual = windows(exclude).first(where: { ($0["id"] as? String) == id })?["bounds"] as? [String: Any] {
-                        reached = ["x", "y", "width", "height"].allSatisfy { abs(number(actual, $0) - number(b, $0)) < 2 }
+                guard ["x", "y", "width", "height"].allSatisfy({ (b[$0] as? NSNumber)?.doubleValue.isFinite == true }),
+                      number(b, "width") > 0, number(b, "height") > 0 else { fail("Invalid window bounds") }
+                let original = fresh["bounds"] as! [String: Any]
+                func actualBounds() -> [String: Any]? {
+                    return windows(exclude).first(where: { ($0["id"] as? String) == id && number($0, "pid") == number(w, "pid") })?["bounds"] as? [String: Any]
+                }
+                func matches(_ a: [String: Any], _ b: [String: Any]) -> Bool {
+                    return ["x", "y", "width", "height"].allSatisfy { abs(number(a, $0) - number(b, $0)) < 2 }
+                }
+                func reach(_ bounds: [String: Any]) -> Bool {
+                    // Moving first avoids clipping a work-area-sized window at
+                    // its old bottom/right position. Retry only a bounded number
+                    // of times for apps that constrain a single AX resize.
+                    for _ in 0..<3 {
+                        requireTargetFocus(ax, w)
+                        var point = CGPoint(x: number(bounds, "x"), y: number(bounds, "y"))
+                        var size = CGSize(width: number(bounds, "width"), height: number(bounds, "height"))
+                        let p = AXValueCreate(.cgPoint, &point)!, s = AXValueCreate(.cgSize, &size)!
+                        // Restoring a large window to a bottom/right position
+                        // needs the opposite first step: shrink in place, then
+                        // move. Growing still happens only after the move.
+                        guard let current = actualBounds() else { return false }
+                        var intermediate = CGSize(width: min(number(current, "width"), size.width), height: min(number(current, "height"), size.height))
+                        if intermediate.width < number(current, "width") || intermediate.height < number(current, "height") {
+                            let small = AXValueCreate(.cgSize, &intermediate)!
+                            if AXUIElementSetAttributeValue(ax, kAXSizeAttribute as CFString, small) != .success { return false }
+                            RunLoop.current.run(until: Date().addingTimeInterval(0.08))
+                            requireTargetFocus(ax, w)
+                        }
+                        if AXUIElementSetAttributeValue(ax, kAXPositionAttribute as CFString, p) != .success { return false }
+                        RunLoop.current.run(until: Date().addingTimeInterval(0.08))
+                        requireTargetFocus(ax, w)
+                        if AXUIElementSetAttributeValue(ax, kAXSizeAttribute as CFString, s) != .success { return false }
+                        let deadline = Date().addingTimeInterval(0.35)
+                        var stable: Date?
+                        repeat {
+                            requireTargetFocus(ax, w)
+                            guard let actual = actualBounds() else { return false }
+                            if matches(actual, bounds) { if stable == nil { stable = Date() } } else { stable = nil }
+                            if let stable = stable, Date().timeIntervalSince(stable) >= 0.08 { return true }
+                            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+                        } while Date() < deadline
                     }
-                    if !reached { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
-                } while !reached && Date() < resizeDeadline
-                guard reached else { fail("Window did not reach requested bounds; inspect its current size and position") }
+                    return false
+                }
+                if reach(b) { result = ["ok": true, "bounds": actualBounds() ?? b] }
+                else {
+                    let constrained = actualBounds() ?? [:]
+                    // Do not continue moving a window after cancellation or loss
+                    // of focus. The app retains the saved Restore bounds.
+                    let restored = reach(original)
+                    let detail: [String: Any] = ["requested": b, "constrained": constrained, "actual": actualBounds() ?? [:], "restored": restored]
+                    let json = String(data: try! JSONSerialization.data(withJSONObject: detail, options: [.sortedKeys]), encoding: .utf8)!
+                    fail("Window did not reach requested bounds (application constraint). \(json)")
+                }
             } else if op == "click" || op == "scroll" {
                 requireExpectedBounds(fresh, args)
                 let p = CGPoint(x: number(args, "x"), y: number(args, "y")); let b = fresh["bounds"] as! [String: Any]

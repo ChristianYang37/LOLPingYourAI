@@ -67,3 +67,34 @@ test('window restore state is not inherited by a reused PID and window ID', asyn
   target = { ...target, processStartedAt: 200 };
   await assert.rejects(desktop.action({ action: 'restore' }, { target }), /No original window bounds saved/);
 });
+
+test('an initial ping captures the exact window even when app settings cover the screen', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'lolping-capture-'));
+  const bounds = { x: 0, y: 0, width: 512, height: 512 }, target = { id: 'target', pid: 2, bounds };
+  const png = await sharp({ create: { width: 512, height: 512, channels: 4, background: '#00ff00' } }).png().toBuffer();
+  let sourceKind;
+  const desktop = new Desktop({ dataDir: dir, overlays: { captureWithoutOverlays: fn => fn() }, electron: { screen: { getDisplayNearestPoint: () => ({ id: 1, bounds, scaleFactor: 1 }), dipToScreenPoint: p => p, screenToDipRect: (_, b) => b }, desktopCapturer: { getSources: async ({ types }) => { sourceKind = types; return [{ id: 'window:target:0', thumbnail: { isEmpty: () => false, getSize: () => ({ width: 512, height: 512 }), toPNG: () => png } }]; } } } });
+  desktop.native = async op => op === 'doctor' ? { screenRecording: true, locked: false } : target;
+  try {
+    assert.equal((await desktop.capture({ x: 256, y: 256 }, 512)).region.captureKind, 'window');
+    assert.deepEqual(sourceKind, ['window']);
+    desktop.resolve = async () => ({ ...target, bounds: { ...bounds, x: 10 } });
+    await assert.rejects(desktop.capture({ x: 256, y: 256 }, 512), /moved during capture/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('pause aborts a running native helper and refuses queued input until its exit', async () => {
+  const { ActionGate } = await import('../gate.mjs');
+  const { writeFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'lolping-cancel-'));
+  const script = join(dir, 'wait.mjs'); await writeFile(script, 'setInterval(() => {}, 100);');
+  const desktop = new Desktop({ helper: process.execPath });
+  const gate = new ActionGate(); gate.enable();
+  let entered;
+  const started = new Promise(r => { entered = r; });
+  const active = gate.run(signal => { const job = desktop.native(script, {}, signal); entered(); return job; });
+  const rejected = assert.rejects(active, /cancelled/);
+  const queued = assert.rejects(gate.run(() => assert.fail('Queued action ran')), /cancelled/);
+  await started; gate.pause(); await Promise.all([rejected, queued, gate.idle()]);
+  await rm(dir, { recursive: true, force: true });
+});

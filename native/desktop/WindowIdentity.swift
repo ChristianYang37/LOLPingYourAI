@@ -43,6 +43,7 @@ var lastFocusFailure = "unknown"
 func hasTargetFocus(_ ax: AXUIElement, _ pid: Int32, requireInput: Bool = false) -> Bool {
     guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { lastFocusFailure = "foreground process differs"; return false }
     let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 0.5)
     guard let focused = axElement(app, kAXFocusedWindowAttribute), CFEqual(focused, ax) else { lastFocusFailure = "focused window differs"; return false }
     // Sheets and other separate input surfaces must not receive the parent window's text.
     if let element = axElement(app, kAXFocusedUIElementAttribute) {
@@ -63,6 +64,9 @@ func hasTargetFocus(_ ax: AXUIElement, _ pid: Int32, requireInput: Bool = false)
     return true
 }
 func requireTargetFocus(_ ax: AXUIElement, _ w: [String: Any], input: Bool = false) {
+    let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+    guard session?["CGSSessionScreenIsLocked"] as? Bool != true else { fail("Desktop is locked") }
+    guard !cancellationRequested else { fail("Desktop action cancelled") }
     guard windowID(ax).map(String.init) == w["id"] as? String,
           hasTargetFocus(ax, Int32(number(w, "pid")), requireInput: input) else { fail("Target window lost keyboard focus or has a dialog (\(lastFocusFailure)); take a fresh screenshot") }
 }
@@ -158,4 +162,14 @@ func selectAllEditableText(_ window: AXUIElement, _ pid: Int32) -> Bool {
         RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     } while Date() < deadline
     fail("Text selection was not confirmed; observe the control again")
+}
+
+// Chromium/Electron may defer publishing focused controls until an assistive
+// client requests its tree. Only request this for an authorized input action;
+// successful opt-in never substitutes for the subsequent window/focus checks.
+func requestInputAccessibility(_ ax: AXUIElement, _ pid: Int32) -> Bool {
+    guard hasTargetFocus(ax, pid), axElement(AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute) == nil else { return false }
+    let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 0.5)
+    return AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success
 }

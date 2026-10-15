@@ -1,7 +1,7 @@
 // Opt-in macOS integration test. Only creates/edits disposable fixture windows.
-const { app, BrowserWindow, ipcMain, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, systemPreferences, screen } = require('electron');
 const { spawn } = require('node:child_process');
-const { writeFileSync, mkdirSync } = require('node:fs');
+const { writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const root = resolve(__dirname, '../..');
 const output = join(root, '.local/window-identity-test');
@@ -37,6 +37,24 @@ async function run() {
     report.doctor = await native('doctor');
     assert(report.doctor.accessibility, 'Enable Accessibility for Electron, then click Run tests. Installed LOLPingYourAI permissions are unchanged.');
     control.hide();
+    await step('fresh Electron process: select, type and restore without pre-enabling AX', async () => {
+      const manifest = join(output, `cold-${Date.now()}.json`);
+      const child = spawn(process.execPath, [join(__dirname, 'cold-board.cjs'), manifest], { stdio: 'ignore' });
+      try {
+        const deadline = Date.now() + 10000;
+        while (!existsSync(manifest) && Date.now() < deadline) await delay(100);
+        assert(existsSync(manifest), 'Cold board did not start');
+        const target = JSON.parse(readFileSync(manifest));
+        const start = Date.now();
+        await native('key', { ...target, key: 'cmd+a' });
+        await native('type', { ...target, text: 'COLD-INPUT-OK' }); await delay(250);
+        assert(JSON.parse(readFileSync(manifest)).value === 'COLD-INPUT-OK', 'Cold input did not arrive');
+        await native('key', { ...target, key: 'cmd+a' });
+        await native('type', { ...target, text: 'COLD' }); await delay(250);
+        assert(JSON.parse(readFileSync(manifest)).value === 'COLD', 'Cold board restore failed');
+        return { passed: true, elapsedMs: Date.now() - start };
+      } finally { child.kill(); if (existsSync(manifest)) unlinkSync(manifest); }
+    });
     const original = { x: 100, y: 100, width: 480, height: 360 };
     const a = await fixture('A', original);
     const b = await fixture('B', { ...original, x: 600 });
@@ -87,6 +105,21 @@ async function run() {
       await native('resize', { ...fresh, bounds: { ...original, x: 150 } });
       return { error, actual: actual.bounds };
     });
+    await step('maximize from each work-area corner and restore original bounds', async () => {
+      const work = screen.getDisplayMatching(a.getBounds()).workArea;
+      const corners = [[work.x, work.y], [work.x + work.width - 480, work.y], [work.x, work.y + work.height - 360], [work.x + work.width - 480, work.y + work.height - 360]];
+      for (const [x, y] of corners) {
+        a.setBounds({ x, y, width: 480, height: 360 }); a.focus(); await delay(200);
+        const fresh = await native('resolve', wa);
+        await native('resize', { ...fresh, bounds: work });
+        const enlarged = (await native('resolve', wa)).bounds;
+        assert(Object.keys(work).every(k => Math.abs(work[k] - enlarged[k]) < 2), 'Maximize bounds differ');
+        await native('resize', { ...fresh, bounds: fresh.bounds });
+        const restored = (await native('resolve', wa)).bounds;
+        assert(Object.keys(restored).every(k => Math.abs(fresh.bounds[k] - restored[k]) < 2), 'Restore bounds differ');
+      }
+      a.setBounds({ ...original, x: 150 }); return { corners: 4, workArea: work };
+    });
     await step('wrong process birth marker rejected', () => rejected('resolve', { ...wa, processStartedAt: -1 }, /process restarted/));
     await step('floating non-focusable window blocks click without receiving input', async () => {
       const overlay = await fixture('OBSTRUCTION', { ...original, x: 150 }, { alwaysOnTop: true, focusable: false });
@@ -112,9 +145,9 @@ async function run() {
 }
 app.whenReady().then(async () => {
   control = new BrowserWindow({ width: 720, height: 620, title: 'LOLPing window identity tests', webPreferences: { nodeIntegration: true, contextIsolation: false } });
-  await control.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(`<h2>LOLPing window identity tests</h2><p>Only disposable windows created by this test are edited.</p><button onclick="require('electron').ipcRenderer.send('permission')">Request Accessibility permission</button> <button onclick="require('electron').ipcRenderer.send('run')">Run tests</button><pre>Ready. Results: .local/window-identity-test/report.json</pre>`));
+  await control.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(`<h2>LOLPing window identity tests</h2><p>Only disposable windows created by this test are edited.</p><button onclick="require('electron').ipcRenderer.send('permission')">Request Accessibility permission</button> <button onclick="require('electron').ipcRenderer.send('run')">Run tests (3 s delay)</button><pre>Ready. Results: .local/window-identity-test/report.json</pre>`));
   ipcMain.on('permission',()=>systemPreferences.isTrustedAccessibilityClient(true));
-  ipcMain.on('run',run);
-  writeFileSync(join(output,'doctor.json'),JSON.stringify(await native('doctor')));
+  ipcMain.on('run', () => { if (!running) setTimeout(run, 3000); });
+  writeFileSync(join(output,'doctor.json'),JSON.stringify({ helper: await native('doctor'), electron: systemPreferences.isTrustedAccessibilityClient(false), executable: process.execPath }));
 });
 app.on('window-all-closed',()=>app.quit());

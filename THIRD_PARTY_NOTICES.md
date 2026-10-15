@@ -7,3 +7,5 @@ The bundled `assets/textures`, `assets/sounds` and `assets/emotes` are copied fr
 This independent project is not endorsed by Riot Games, OpenAI or Anthropic. League of Legends and associated marks belong to Riot Games. Including assets here does not grant rights to redistribute them under MIT.
 
 Runtime libraries remain under their respective package licenses; see pnpm-lock.yaml.
+
+The reusable tools under `tools/acceptance/` adapt the acceptance-driving, observation and timeline ideas/code contributed by csxq0605 in [PR #8](https://github.com/ChristianYang37/LOLPingYourAI/pull/8), under this repository's MIT license. The original recordings, screenshots, personal state and session logs are not included in this tool package.

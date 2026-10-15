@@ -31,7 +31,8 @@ test('read-only ping cannot operate desktop', async () => {
 
 test('config rejects invalid durations and mappings', () => {
   assert.equal(validateConfig().wardHours, 0.5);
-  assert.throws(() => validateConfig({ sessionHours: NaN }));
+  assert.equal(Object.hasOwn(validateConfig({ sessionHours: 2 }), 'sessionHours'), false);
+  assert.throws(() => validateConfig({ wardHours: NaN }));
   assert.throws(() => validateConfig({ mappings: { missing: { mode: 'shell', prompt: 'bad' } } }));
 });
 

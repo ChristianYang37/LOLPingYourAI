@@ -109,7 +109,7 @@ async function start(): Promise<void> {
   const tray = new AppTray(
     IS_MAC ? assetPath('textures', 'generic_ping.png') : buildResourcePath('icon.png'),
     {
-      openSettings: () => openSettingsWindow(),
+      openSettings: () => openSettingsWindow('settings'),
       teammate: () => openSettingsWindow('teammate'),
       setEnabled: (on) => setEnabled(on),
       retryHelper: startHelper,

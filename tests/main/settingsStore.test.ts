@@ -90,8 +90,9 @@ describe('SettingsStore', () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 }));
     new SettingsStore(dir, 10).load();
-    await sleep(80);
-    expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))).toMatchObject({ emoteTrigger: 'ctrl', emoteSizePx: 150, customEmotes: [] });
+    await vi.waitFor(() => {
+      expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))).toMatchObject({ emoteTrigger: 'ctrl', emoteSizePx: 150, customEmotes: [] });
+    }, { timeout: 3000 });
   });
 
   it('emits change with the normalized value', () => {

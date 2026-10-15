@@ -1,0 +1,82 @@
+/* Chat is the product surface; configuration lives one level below it. */
+.workspace { --surface: #fafaf8; --panel: #fff; --ink: #242927; --muted: #777f79; --line: #e3e7e1; --accent: #35674f; --soft: #eef3ec; height: 100%; display: flex; flex-direction: column; background: var(--surface); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+@media (prefers-color-scheme: dark) { .workspace { --surface: #171b19; --panel: #202622; --ink: #e5eae5; --muted: #9aa69c; --line: #343e37; --accent: #9dcaad; --soft: #28352c; } }
+.workspace [hidden] { display: none !important; }
+.workspace button, .workspace textarea { font: inherit; }
+.workspace button { cursor: pointer; }
+.workspace button:disabled { cursor: default; }
+.workspace button:focus-visible, .workspace textarea:focus-visible, .workspace select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.workspace-bar { height: 68px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; -webkit-app-region: drag; }
+[data-platform=mac] .workspace-bar { padding-left: 98px; }
+[data-platform=win] .workspace-bar { padding-right: 150px; }
+.workspace-brand { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.workspace-brand img { width: 29px; height: 29px; border-radius: 9px; }
+.workspace-brand span { color: var(--muted); border-left: 1px solid var(--line); margin-left: 4px; padding-left: 14px; font-size: 12px; }
+.workspace-switch { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; color: var(--ink); white-space: nowrap; }
+.workspace-switch svg { width: 17px; height: 17px; }
+.chat-view { flex: 1; min-height: 0; }
+.chat-home { max-width: 960px; box-sizing: border-box; height: 100%; padding: 28px 40px 18px; margin: auto; display: flex; flex-direction: column; gap: 18px; }
+.chat-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.eyebrow { font-size: 10px; letter-spacing: .14em; color: var(--muted); }
+.chat-heading h1 { margin: 4px 0 0; font-size: 24px; font-weight: 600; letter-spacing: -.04em; }
+.model-chip { display: flex; align-items: center; gap: 9px; max-width: 48%; padding: 8px 12px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 12px !important; }
+.model-chip span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+.connection-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 10px; background: var(--soft); font-size: 12px; color: var(--accent); }
+.connection-banner button { border: 0; background: transparent; color: inherit; flex-shrink: 0; padding: 0; }
+.conversation-full { flex: 1; min-height: 0; padding: 0; gap: 12px; }
+.conversation-full header { font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.conversation-full header img { width: 21px; height: 21px; }
+.conversation-full .conversation-body { scrollbar-gutter: stable; }
+.conversation-full .reply-message { padding: 20px 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; margin: 8px 4px 16px 0; }
+.conversation-full .reply-text { line-height: 1.85; font-size: 15px; margin-top: 12px; }
+.conversation-full .reply-text code { background: var(--soft); padding: 2px 4px; border-radius: 4px; font-size: .9em; }
+.chat-empty { min-height: 230px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 15px; }
+.chat-empty h2 { margin: 20px 0 5px; font-size: 22px; font-weight: 500; letter-spacing: -.04em; }
+.chat-empty p { font-size: 13px; color: var(--muted); }
+.ping-constellation { display: flex; align-items: center; gap: 24px; }
+.ping-constellation img { width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 5px 10px #0002); }
+.ping-constellation img:nth-child(2) { width: 65px; height: 65px; transform: translateY(-5px); }
+.ping-examples { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; justify-content: center; }
+.ping-examples span { border: 1px solid var(--line); padding: 6px 10px; border-radius: 8px; font-size: 11px; color: var(--muted); }
+.ping-examples b { color: #b59a40; margin-right: 5px; }
+.conversation-full footer { justify-content: flex-end; }
+.conversation-full button { background: var(--panel); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 6px 11px; font-size: 12px; }
+.conversation-full .stop-button { color: #bc6155; border-color: #bc615566; }
+.conversation-full form { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; align-items: flex-end; box-shadow: 0 4px 18px #00000004; }
+.conversation-full form:focus-within { border-color: var(--accent); }
+.conversation-full textarea { flex: 1; min-width: 0; resize: none; border: 0; background: transparent; color: var(--ink); padding: 2px 4px; line-height: 1.6; }
+.conversation-full textarea:focus-visible { outline: none; }
+.conversation-full textarea::placeholder { color: var(--muted); }
+.conversation-full form button { background: var(--accent); color: var(--surface); border: 0; padding: 8px 15px; }
+.composer-hint { text-align: center; font-size: 10px; color: var(--muted); }
+.settings-layout { flex: 1; min-height: 0; display: flex; }
+.settings-side { width: 180px; flex-shrink: 0; padding: 24px 12px; border-right: 1px solid var(--line); }
+.settings-side > p { margin: 0 12px 16px; font-size: 11px; letter-spacing: .1em; color: var(--muted); }
+.workspace .settings-side .navItem { width: 100%; height: 38px; border-radius: 8px; gap: 10px; font-size: 13px; margin-bottom: 4px; }
+[data-platform] .workspace .settings-side .navItem svg { background: none; padding: 0; width: 18px; height: 18px; color: var(--muted); }
+.workspace .settings-side .navItem.sel { background: var(--soft); color: var(--accent); }
+.workspace .settings-side .navItem.sel::before { display: none; }
+.settings-content { overflow: auto; flex: 1; min-width: 0; padding: 26px 32px 40px; }
+.settings-content > h1 { font-size: 22px; margin: 0 auto 24px; max-width: 760px; }
+.settings-content > section { max-width: 760px; margin: auto; }
+.settings-content > section > .section { display: none; }
+.workspace .ai-heading { display: none; }
+.workspace .ai-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.workspace .ai-card h3 { font-size: 15px; }
+.workspace .ai-card button { background: var(--soft); color: var(--accent); padding: 7px 12px; }
+.workspace .ai-card p { font-size: 12px; color: var(--muted); }
+.workspace .ai-tabs { gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.workspace .ai-tabs button { border: 0; border-radius: 7px; padding: 7px 12px; color: var(--muted); }
+.workspace .ai-tabs button[aria-pressed=true] { background: var(--soft); color: var(--accent); }
+@media (max-width: 780px) { .workspace-brand span { display: none; }.chat-home { padding: 20px 24px 14px; }.settings-side { width: 145px; }.settings-content { padding: 24px 20px; }.chat-heading h1 { font-size: 21px; } }
+@media (max-height: 590px) { .chat-home { gap: 10px; padding-top: 14px; }.chat-empty h2 { font-size: 18px; margin-top: 10px; }.chat-empty { min-height: 170px; }.ping-examples { margin-top: 10px; }.ping-constellation img:nth-child(2) { width: 42px; height: 42px; } }
+
+.conversation-log { display: flex; flex-direction: column; gap: 18px; padding: 12px 0 24px; }
+.log-entry { max-width: 90%; border-radius: 14px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--line); }
+.log-user { align-self: flex-end; background: var(--soft); }
+.log-agent, .log-timer { align-self: flex-start; }
+.log-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); }
+.log-meta strong { color: var(--accent); text-transform: capitalize; }
+.log-signal { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+.log-signal img { width: 30px; height: 30px; object-fit: contain; }
+.log-entry .reply-text { margin: 9px 0; }

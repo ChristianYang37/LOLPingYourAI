@@ -6,13 +6,13 @@ The inherited C++ helper implements press–drag–release, cancellation and inp
 
 ## Capture and target identity
 
-A ping selects a window ID plus owning PID, window bounds and a normalized anchor within that window. The focus is a configurable 512×512 logical-pixel square. Retina screen images are resampled to one image pixel per logical pixel. Negative display coordinates and edge padding are explicit in `region.valid`, `region.padding`, `region.scaleFactor` and `imageScale`. Overlay windows are hidden during capture and restored inactive.
+A ping selects a window ID plus owning PID, window bounds and a normalized anchor within that window. The focus is a configurable 512×512 logical-pixel square. Images captured by exact window ID are resampled to one image pixel per logical pixel. Negative display coordinates and edge padding are explicit in `region.valid`, `region.padding`, `region.scaleFactor` and `imageScale`. Pixels outside the selected window are padded, even when another window covers the ping point. Window identity and bounds are checked again after capture. Overlay windows are hidden during capture and restored inactive.
 
 Each action resolves the window identity again. Coordinate actions are rejected after a bounds change until a new screenshot. Closing a window fails the visit rather than using stale coordinates. Type/key actions require the selected window to acquire foreground control. The focus square does not restrict relevant controls elsewhere in that same window.
 
 ## Sessions and cancellation
 
-Each harness has one persistent teammate identity. Human activity timestamps are separate from timers and agent replies. After T hours of user inactivity, a new user ping safely interrupts the old turn, creates a new thread and supplies the saved goal/progress/next-step summary. Existing unrelated chats use explicit task handoff; the demo never claims to own an external session.
+Each harness has one persistent teammate identity. The app resumes that native identity regardless of idle duration and across app restarts. The harness manages context and compaction; the app imposes no session lifetime or timed reset. Old `sessionHours` settings and expiry flags are ignored. Existing unrelated chats use explicit task handoff; the demo never claims to own an external session.
 
 Codex uses App Server JSON-RPC: initialize, thread/start, thread/resume, turn/start, turn/steer and turn/interrupt. Loaded thread IDs are cached per child process: resuming a freshly created thread can fail because its rollout does not exist yet. A process restart clears this cache. Skill input is explicit, and a copy is installed under the runtime workspace's `.agents/skills`.
 
@@ -28,7 +28,7 @@ One action gate serializes desktop operations. Warning/retreat invalidate the ge
 
 MCP is stdio; its child receives a random per-launch capability token for a loopback HTTP broker. Browser Origin requests and unauthenticated calls are rejected. Settings IPC validates its sender. MCP exposes only context/screenshot/action/reply/ward/handoff/icon tools, while the local CLI also has configuration and session operations. User text travels as JSON and process argument arrays, never interpolated shell commands.
 
-State lives in the application data directory, with atomic JSON replacement and restrictive POSIX permissions. Captures, tokens, session IDs and local icons never belong in Git. Event receipts survive restart. Wards persist independently: pending visits survive restart/sleep, lock waits, completed/failed/cancelled visits are not repeated. An interrupted `visiting` record becomes `uncertain` for review instead of silently repeating an operation.
+State lives in the application data directory, with atomic JSON replacement and restrictive POSIX permissions. Captures, tokens, session IDs and local icons never belong in Git. Event receipts survive restart. A separate `ai-conversation.json` display log retains user messages/signals, assistant replies and displayed reverse pings; it does not replace or replay native harness history. The UI loads recent entries and can page backwards. Text streaming is checkpointed every 500 ms; abrupt process termination may lose the last unflushed fragment. Screenshot/tool payloads are excluded. Wards persist independently: pending visits survive restart/sleep, lock waits, completed/failed/cancelled visits are not repeated. An interrupted `visiting` record becomes `uncertain` for review instead of silently repeating an operation.
 
 ## Extending
 
@@ -41,3 +41,7 @@ State lives in the application data directory, with atomic JSON replacement and 
 - `skills/lolping-your-ai/SKILL.md`: teammate behavior.
 
 Official references: [Codex App Server](https://learn.chatgpt.com/docs/app-server), [Claude Computer Use](https://code.claude.com/docs/en/computer-use). Native Codex Computer Use is detected, but the demo selects the project backend so coordinate mapping and cancellation share one gate. This is an intentional compatibility choice; native backend cancellation integration remains future work.
+
+## Explicit icon generation
+
+The Generate button starts a separate harness adapter with a short-lived local bridge exposing only `submit_icon`. Ordinary teammate MCP sessions do not list or accept that operation. Completion, cancellation and a 15-minute deadline revoke the generation connection. Candidate metadata distinguishes output format from whether a reference image was supplied; it does not assert that the model used the reference.
