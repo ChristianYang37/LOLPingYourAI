@@ -49,6 +49,8 @@ const webpAnim =(w = 200, h = 200, total = 2000): Uint8Array =>
 const stillExtended = (flags: number, w = 160, h = 120, total = 600): Uint8Array =>
   padded([...ascii('RIFF'), ...le32(total - 8), ...ascii('WEBPVP8X'), ...le32(10), flags, 0, 0, 0, ...le24(w - 1), ...le24(h - 1)], total);
 const png = (): Uint8Array => padded([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 300);
+const ogg = (total = 500): Uint8Array => padded(ascii('OggS'), total);
+const mp3 = (total = 500): Uint8Array => padded([...ascii('ID3'), 4, 0], total);
 
 const hashOf = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex').slice(0, 32);
 const tempDir = (): string => mkdtempSync(join(tmpdir(), 'lolping-emotes-'));
@@ -175,6 +177,39 @@ describe('EmoteLibrary', () => {
     expect(files(lib.dir)).toHaveLength(1);
   });
 
+  it('saves a sound, replaces it in another format, and deletes it', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const s = still();
+    const hash = hashOf(s);
+    await lib.save({ name: 'x', still: s }, []);
+    expect(await lib.setSound(`c:${hash}`, ogg())).toBeNull();
+    expect(files(lib.dir)).toEqual([`${hash}.sound.ogg`, `${hash}.webp`]);
+    expect(await lib.setSound(`c:${hash}`, mp3())).toBeNull(); // the OGG would be served first: it goes
+    expect(files(lib.dir)).toEqual([`${hash}.sound.mp3`, `${hash}.webp`]);
+    expect(await lib.setSound(`c:${hash}`, null)).toBeNull();
+    expect(files(lib.dir)).toEqual([`${hash}.webp`]);
+  });
+
+  it('refuses a sound that is not OGG, MP3 or WAV, or is over 1 MB, and keeps the old one', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const hash = hashOf(still());
+    await lib.save({ name: 'x', still: still() }, []);
+    await lib.setSound(`c:${hash}`, ogg());
+    expect(await lib.setSound(`c:${hash}`, png())).toBe('type');
+    expect(await lib.setSound(`c:${hash}`, ogg(1_048_577))).toBe('size');
+    expect(await lib.setSound('../settings', ogg())).toBe('type');
+    expect(files(lib.dir)).toEqual([`${hash}.sound.ogg`, `${hash}.webp`]);
+  });
+
+  it('removes an emote together with its sound', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const id = `c:${hashOf(still())}`;
+    await lib.save({ name: 'x', still: still() }, []);
+    await lib.setSound(id, mp3());
+    await lib.remove(id);
+    expect(files(lib.dir)).toEqual([]);
+  });
+
   it('present drops entries whose still is gone', async () => {
     const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
     const a = await lib.save({ name: 'a', still: still(100, 100), anim: gif() }, []);
@@ -214,6 +249,14 @@ describe('resolveEmoteArt', () => {
     expect(resolveEmoteArt(plain.id, [plain], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${'cd'.repeat(16)}.webp`, animated: false });
   });
 
+  it('plays our own emote’s sound, never a room member’s', () => {
+    const loud: CustomEmote = { ...plain, sound: true };
+    const sound = `lolping://emotes/${'cd'.repeat(16)}.sound`;
+    expect(resolveEmoteArt(loud.id, [loud], false)).toMatchObject({ kind: 'custom', sound });
+    expect(resolveEmoteArt(loud.id, [loud], true)).not.toHaveProperty('sound');
+    expect(resolveEmoteArt(plain.id, [plain], false)).not.toHaveProperty('sound');
+  });
+
   it('resolves bundled emotes and stands a placeholder in for unknown ones', () => {
     expect(resolveEmoteArt('facepalm', [], true)).toEqual({ kind: 'bundled', slug: 'facepalm' });
     expect(resolveEmoteArt(moving.id, [plain], false)).toEqual({ kind: 'placeholder' });
@@ -248,6 +291,14 @@ describe('resolveEmoteFile', () => {
     expect(resolveEmoteFile([c], `/${hash}.anim`)).toBe(join(c, `${hash}.webp`)); // a missing animation shows as its still
     const [d] = setup([], []);
     expect(resolveEmoteFile([d], `/${hash}.anim`)).toBeNull();
+  });
+
+  it('serves a sound as .sound.ogg, .mp3 or .wav, and nothing in its place', () => {
+    const [a] = setup([`${hash}.sound.mp3`, `${hash}.webp`], []);
+    expect(resolveEmoteFile([a], `/${hash}.sound`)).toBe(join(a, `${hash}.sound.mp3`));
+    const [b] = setup([`${hash}.webp`], []);
+    expect(resolveEmoteFile([b], `/${hash}.sound`)).toBeNull();
+    expect(resolveEmoteFile([a], `/${hash}.sound.mp3`)).toBeNull();
   });
 
   it('serves no other names', () => {

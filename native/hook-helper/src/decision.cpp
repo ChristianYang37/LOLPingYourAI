@@ -179,9 +179,18 @@ Result Decision::onEvent(const InputEvent& e) {
   Result r;
   if (e.selfInjected) return r;
   switch (e.kind) {
-    case EvKind::KeyDown:
+    case EvKind::KeyDown: {
+      // Tap-through: another key while a custom trigger key is held back means the user is typing.
+      // The held-back key is sent first; if this key would pass through, it would overtake that queued
+      // inject, so it is swallowed and replayed right behind it instead, keeping the typed order.
+      const bool flushed = flushHeldBack(e.vk & 0xFF, r);
       onKeyDown(e, r);
+      if (flushed && !r.swallow) {
+        r.swallow = true;
+        r.injects.push_back({InjectKind::KeyDown, Btn::None, e.vk & 0xFF});
+      }
       break;
+    }
     case EvKind::KeyUp:
       onKeyUp(e, r);
       break;
@@ -199,6 +208,18 @@ Result Decision::onEvent(const InputEvent& e) {
       break;
   }
   return r;
+}
+
+// Sends the held-back custom trigger key down when a different key arrives, and switches that key to typing:
+// from now on its repeats and real key-up reach the OS. Returns whether a key was flushed.
+bool Decision::flushHeldBack(uint32_t vk, Result& r) {
+  if (heldBackVk_ == 0 || vk == heldBackVk_) return false;
+  const uint32_t heldVk = heldBackVk_;
+  heldBackVk_ = 0;
+  typedVk_ = heldVk;
+  swallowKeyUps_.erase(heldVk);  // the OS now sees it down, so it must see it go up
+  r.injects.push_back({InjectKind::KeyDown, Btn::None, heldVk});
+  return true;
 }
 
 void Decision::onKeyDown(const InputEvent& e, Result& r) {
@@ -237,9 +258,18 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
     }
     // Caps Lock and custom-key triggers of either wheel would toggle or type: keep them from the OS.
     const auto ownKey = [&](WheelKind k) { return isKeyTrigger(k) && vk == keyTriggerVk(k); };
+    // Tap-through: the trigger key was flushed for typing, so its auto-repeats type too.
+    if (vk == typedVk_) {
+      swallowKeyUps_.erase(vk);
+      return;
+    }
     if (ownKey(WheelKind::Ping) || ownKey(WheelKind::Emote)) {
       r.swallow = true;
       swallowKeyUps_.insert(vk);
+      // Tap-through: hold a custom key back instead of dropping it; onKeyUp types it if no drag used it.
+      // Caps Lock keeps the old behaviour: a replayed tap would toggle it.
+      const auto customKey = [&](WheelKind k) { return spec(k).trigger == Trigger::CustomVk && vk == spec(k).vk; };
+      if (!repeat && (customKey(WheelKind::Ping) || customKey(WheelKind::Emote))) heldBackVk_ = vk;
       return;
     }
   }
@@ -256,6 +286,16 @@ void Decision::onKeyUp(const InputEvent& e, Result& r) {
   const bool triggerReleased = heldBefore && !held(owner_) && isTriggerVk(owner_, vk);
 
   if (swallowKeyUps_.erase(vk) > 0) r.swallow = true;
+  // Tap-through: a flushed key's real up passes (its swallow was dropped at the flush), ending typing mode.
+  if (vk == typedVk_) typedVk_ = 0;
+  // Tap-through: the key was pressed and released with nothing in between: type it now (down + up).
+  // The real up stays swallowed: the OS never saw the real down.
+  if (vk == heldBackVk_) {
+    heldBackVk_ = 0;
+    r.swallow = true;
+    r.injects.push_back({InjectKind::KeyDown, Btn::None, vk});
+    r.injects.push_back({InjectKind::KeyUp, Btn::None, vk});
+  }
   if (needMask_ && (modBit(vk) == ModAlt || modBit(vk) == ModWin)) {
     // Swallow the real key-up and replay it after a no-op key, in that order.
     needMask_ = false;
@@ -304,6 +344,7 @@ void Decision::onMouseDown(const InputEvent& e, Result& r) {
     if (cfg_.gameCheck && fullscreenProbe_ && fullscreenProbe_(e.x, e.y)) return;
     r.swallow = true;
     markSwallow();
+    heldBackVk_ = 0;  // tap-through: the held-back key started a gesture, so it is never typed
     state_ = State::Pending;
     owner_ = ping ? WheelKind::Ping : WheelKind::Emote;
     dragBtn_ = e.btn;

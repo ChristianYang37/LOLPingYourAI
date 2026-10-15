@@ -3,6 +3,7 @@ import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
+import { WHEEL } from './geometry';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
@@ -33,6 +34,8 @@ export interface Settings {
   clickPingId: PingId;
   /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
   gameCheck: boolean;
+  /** The displayed SVG size, shared by the ping and emote wheels. */
+  wheelSizePx: number;
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
@@ -87,6 +90,7 @@ export const DEFAULT_SETTINGS: Settings = {
   clickPing: false,
   gameCheck: true,
   clickPingId: DEFAULT_CLICK_PING,
+  wheelSizePx: WHEEL.size,
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
   pingSizePx: 110,
@@ -117,6 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const LIMITS = {
   dragThresholdPx: { min: 2, max: 40, step: 1 },
+  wheelSizePx: { min: 300, max: 900, step: 10 },
   pingSizePx: { min: 60, max: 220, step: 1 },
   pingDurationS: { min: 1, max: 8, step: 0.1 },
   agentPingDurationS: { min: 3, max: 15, step: 0.5 },
@@ -142,7 +147,7 @@ function num(raw: unknown, key: NumKey): number {
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
 
 function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): TriggerKey {
-  if (platform === 'mac' && raw === 'capslock') return fallback;
+  if (platform === 'mac' && (raw === 'capslock' || (isObj(raw) && raw.vk === CAPS_LOCK_VK))) return fallback;
   if (typeof raw === 'string' && (NAMED_TRIGGERS as readonly string[]).includes(raw)) return raw as NamedTrigger;
   if (isObj(raw) && isVk(raw.vk)) return { vk: raw.vk };
   return fallback;
@@ -194,7 +199,7 @@ function roomCode(raw: unknown): string | null {
   return parsed.ok ? parsed.code : null;
 }
 
-/** Valid entries only, rebuilt field by field: well-formed unique ids, a boolean flag, a safe name; the first MAX_CUSTOM_EMOTES. */
+/** Valid entries only, rebuilt field by field: well-formed unique ids, boolean flags, a safe name; the first MAX_CUSTOM_EMOTES. */
 function customEmotes(raw: unknown): CustomEmote[] {
   if (!Array.isArray(raw)) return [];
   const out: CustomEmote[] = [];
@@ -204,7 +209,8 @@ function customEmotes(raw: unknown): CustomEmote[] {
     const id = e.id;
     if (out.some((c) => c.id === id)) continue;
     // A name with nothing left shows the first characters of its id, which reads the same in every language.
-    out.push({ id, name: sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX), animated: e.animated });
+    const name = sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX);
+    out.push({ id, name, animated: e.animated, ...(e.sound === true ? { sound: true } : {}) });
   }
   return out;
 }
@@ -226,6 +232,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     dragThresholdPx: num(r.dragThresholdPx, 'dragThresholdPx'),
     clickPing: bool(r.clickPing, 'clickPing'),
     gameCheck: bool(r.gameCheck, 'gameCheck'),
+    wheelSizePx: num(r.wheelSizePx, 'wheelSizePx'),
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,
@@ -285,13 +292,13 @@ export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platfor
 
 export type OverlaySettings = Pick<
   Settings,
-  'pingSizePx' | 'pingDurationS' | 'agentPingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
+  'pingSizePx' | 'pingDurationS' | 'agentPingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheelSizePx' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
   pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, agentPingDurationS: s.agentPingDurationS, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
-  wheel: [...s.wheel], clickPingId: s.clickPingId,
+  wheelSizePx: s.wheelSizePx, wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),
 });

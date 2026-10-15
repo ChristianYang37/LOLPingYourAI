@@ -111,12 +111,13 @@ describe('SettingsStore', () => {
     const dir = tempDir();
     const store = new SettingsStore(dir);
     store.load();
-    store.update({ volume: 33, clickPing: true });
+    store.update({ volume: 33, clickPing: true, wheelSizePx: 450 });
     await store.flush();
     expect(existsSync(join(dir, 'settings.json.tmp'))).toBe(false);
     const again = new SettingsStore(dir).load();
     expect(again.volume).toBe(33);
     expect(again.clickPing).toBe(true);
+    expect(again.wheelSizePx).toBe(450);
   });
 
   it('debounces writes and keeps the last value', async () => {

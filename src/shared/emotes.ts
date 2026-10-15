@@ -9,12 +9,14 @@ export interface CustomEmote {
   name: string;
   /** Has a `.anim` file besides the still. */
   animated: boolean;
+  /** Has a `.sound` file: it plays when we place the emote, on this computer only (rooms never get it). */
+  sound?: boolean;
 }
 
 /** What an emote looks like on screen. A placeholder stands in for a custom emote whose files are missing. */
 export type EmoteArt =
   | { kind: 'bundled'; slug: string }
-  | { kind: 'custom'; url: string; animated: boolean }
+  | { kind: 'custom'; url: string; animated: boolean; sound?: string }
   | { kind: 'placeholder' };
 
 export type ImportError = 'type' | 'size' | 'animSize' | 'detail' | 'full' | 'duplicate' | 'disk';
@@ -25,6 +27,8 @@ export interface EmoteFile {
   anim?: Uint8Array;
 }
 export type ImportResult = { ok: true; id: EmoteRef } | { ok: false; error: ImportError };
+export type SoundError = 'type' | 'size' | 'long' | 'disk';
+export type SoundResult = { ok: true } | { ok: false; error: SoundError };
 
 export const MAX_CUSTOM_EMOTES = 24;
 export const EMOTE_DURATION_S = 3;
@@ -37,6 +41,9 @@ export const INPUT_MAX_BYTES = 8_388_608;
 export const INPUT_MAX_SIDE = 8192;
 export const ANIM_MAX_BYTES = 5_242_880;
 export const ANIM_MAX_SIDE = 1024;
+/** An imported emote's sound: OGG, MP3 or WAV, at most this many bytes and seconds. */
+export const SOUND_MAX_BYTES = 1_048_576;
+export const SOUND_MAX_S = 5;
 
 const SLUG = /^[a-z0-9_]{1,40}$/;
 const CUSTOM = /^c:[0-9a-f]{32}$/;
@@ -55,9 +62,11 @@ export const customHash = (ref: EmoteRef): string => ref.slice(2);
 export const emoteAnimUrl = (slug: string): string => `../emotes/${slug}.webp`;
 export const emoteIconUrl = (slug: string): string => `../emotes/${slug}.png`;
 export const emoteSoundUrl = (slug: string): string => `../emotes/${slug}.ogg`;
-/** Imported emotes live in the user's data folder; the lolping:// protocol serves them. */
-export const customStillUrl = (hash: string): string => `lolping://emotes/${hash}.webp`;
-export const customAnimUrl = (hash: string): string => `lolping://emotes/${hash}.anim`;
+/** Imported emotes live in the user's data folder; the lolping:// protocol serves them under this. */
+export const CUSTOM_EMOTE_URL = 'lolping://emotes/';
+export const customStillUrl = (hash: string): string => `${CUSTOM_EMOTE_URL}${hash}.webp`;
+export const customAnimUrl = (hash: string): string => `${CUSTOM_EMOTE_URL}${hash}.anim`;
+export const customSoundUrl = (hash: string): string => `${CUSTOM_EMOTE_URL}${hash}.sound`;
 
 /** Every bundled file that has to ship, relative to assets/. */
 export function allEmoteAssetFiles(): string[] {

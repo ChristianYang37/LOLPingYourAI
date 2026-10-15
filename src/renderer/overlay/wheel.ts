@@ -38,6 +38,7 @@ export class Wheel {
   private ox = 0;
   private oy = 0;
   private opened = false;
+  private scale = 1;
 
   constructor(
     private readonly svg: SVGSVGElement,
@@ -58,6 +59,15 @@ export class Wheel {
     });
   }
 
+  /** Scales the SVG and its dead zone together, keeping the press point at the centre. */
+  setSize(sizePx: number): void {
+    this.scale = sizePx / WHEEL.size;
+    this.svg.style.width = `${sizePx}px`;
+    this.svg.style.height = `${sizePx}px`;
+    this.svg.style.marginLeft = `${-sizePx / 2}px`;
+    this.svg.style.marginTop = `${-sizePx / 2}px`;
+  }
+
   get isOpen(): boolean {
     return this.opened;
   }
@@ -73,13 +83,13 @@ export class Wheel {
   }
 
   move(x: number, y: number): void {
-    if (this.opened) this.setHot(pickSlice(x - this.ox, y - this.oy));
+    if (this.opened) this.setHot(pickSlice(x - this.ox, y - this.oy, WHEEL.innerR * this.scale));
   }
 
   /** Closes the wheel. Returns the chosen item's key at the wheel centre, or null when released in the dead zone. */
   release(x: number, y: number): { key: string; x: number; y: number } | null {
     if (!this.opened) return null;
-    const slice = pickSlice(x - this.ox, y - this.oy);
+    const slice = pickSlice(x - this.ox, y - this.oy, WHEEL.innerR * this.scale);
     this.close();
     const item = slice >= 0 ? this.items[slice] : undefined;
     return item ? { key: item.key, x: this.ox, y: this.oy } : null;

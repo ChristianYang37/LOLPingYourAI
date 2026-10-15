@@ -13,7 +13,7 @@ import type { SettingsStore } from './settingsStore';
 import { settingsDir } from './paths';
 import { settingsWindow, openSettingsWindow } from './settingsWindow';
 
-const pingMap: Record<string, string> = { omw: 'onmyway', needvision: 'vision', visioncleared: 'cleared' };
+const pingMap: Record<string, string> = { missingflip: 'missing', omw: 'onmyway', needvision: 'vision', visioncleared: 'cleared' };
 const reverse: Record<string, string> = { onmyway: 'omw', vision: 'needvision', cleared: 'visioncleared', missing: 'missing', danger: 'danger', assist: 'assist', allin: 'allin', bait: 'bait', retreat: 'retreat', like: 'like', celebrate: 'celebrate', generic: 'generic', push: 'push', enemyvision: 'enemyvision' };
 
 export async function startTeammate(overlays: OverlayManager, library: EmoteLibrary, settings: SettingsStore) {

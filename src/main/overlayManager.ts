@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, screen, type Display, type WebContents } from 'electron';
+import { BrowserWindow, ipcMain, screen, type Display, type Rectangle, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import {
@@ -28,6 +28,16 @@ export interface SharedEmote {
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * Where a display's overlay window goes. Windows takes a shown window that covers a whole display for a full-screen app:
+ * the taskbar drops behind it and an auto-hidden one won't slide up. One DIP short of the bottom edge, it doesn't.
+ */
+export const overlayBounds = (d: Display): Rectangle =>
+  IS_MAC ? d.bounds : { ...d.bounds, height: d.bounds.height - 1 };
+
+/** Messages that put something new on an overlay. */
+const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show', 'agent:ping']);
 
 /**
  * One transparent, click-through, always-on-top window per display.
@@ -229,14 +239,14 @@ export class OverlayManager extends EventEmitter {
     }
     for (const d of displays) {
       const win = this.windows.get(d.id);
-      if (win) win.setBounds(d.bounds);
+      if (win) win.setBounds(overlayBounds(d));
       else this.windows.set(d.id, this.createWindow(d));
     }
   }
 
   private createWindow(d: Display): BrowserWindow {
     const win = new BrowserWindow({
-      ...d.bounds,
+      ...overlayBounds(d),
       transparent: true,
       backgroundColor: '#00000000',
       frame: false,
@@ -261,7 +271,10 @@ export class OverlayManager extends EventEmitter {
     });
     win.setIgnoreMouseEvents(true);
     win.setAlwaysOnTop(true, 'screen-saver');
-    if (IS_MAC) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    if (IS_MAC) {
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+      win.setHiddenInMissionControl(true);
+    }
     win.webContents.on('did-finish-load', () => {
       win.webContents.send('overlay:settings', this.settings);
       this.ready.add(d.id);
@@ -277,7 +290,7 @@ export class OverlayManager extends EventEmitter {
     win.webContents.on('render-process-gone', () => { if (!win.isDestroyed()) win.destroy(); });
     win.once('ready-to-show', () => {
       win.showInactive();
-      win.setBounds(d.bounds); // re-apply: mixed-DPI setups can size the first frame wrong
+      win.setBounds(overlayBounds(d)); // re-apply: mixed-DPI setups can size the first frame wrong
     });
     void loadPage(win, 'overlay');
     return win;
@@ -285,6 +298,10 @@ export class OverlayManager extends EventEmitter {
 
   private send<C extends OverlayChannel>(displayId: number, channel: C, payload: OverlayEvents[C]): void {
     const w = this.windows.get(displayId);
-    if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
+    if (!w || w.isDestroyed()) return;
+    // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.
+    // Setting the level again puts it back on top of the topmost windows. Only when something new appears, not per move.
+    if (!IS_MAC && RAISING_CHANNELS.has(channel)) w.setAlwaysOnTop(true, 'screen-saver');
+    w.webContents.send(channel, payload);
   }
 }

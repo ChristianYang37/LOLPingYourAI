@@ -1,6 +1,6 @@
 import { Button } from '@fluentui/react-components';
 import { DismissRegular } from '@fluentui/react-icons';
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import { dropPatch, type WheelPatch, type WheelSource, type WheelTarget } from '../../../shared/wheelLayout';
 import { useText } from '../text';
 
@@ -18,13 +18,17 @@ const wedgePath = (i: number): string => {
   return `M${pt(R_IN, a0)} A${R_IN},${R_IN} 0 0 1 ${pt(R_IN, a1)} L${pt(R_OUT, a1)} A${R_OUT},${R_OUT} 0 0 0 ${pt(R_OUT, a0)}Z`;
 };
 
-/** One thing that can go on the wheel, a ping or an emote. `badge` is a small tag on its tile; `onRemove` adds an × to it. */
+/**
+ * One thing that can go on the wheel, a ping or an emote. `badge` is a small tag on its tile; `onRemove` adds an × to it,
+ * and `tool` a small button in its bottom corner.
+ */
 export interface PoolItem<T extends string> {
   id: T;
   icon: string;
   name: string;
   badge?: string;
   onRemove?: () => void;
+  tool?: { label: string; icon: ReactElement; on: boolean; onClick: () => void };
 }
 
 interface Props<T extends string> {
@@ -200,6 +204,12 @@ export function WheelEditor<T extends string>({
                     <img src={p.icon} alt="" />
                     {p.name}
                   </div>
+                  {p.tool ? (
+                    <button type="button" className={`weTool${p.tool.on ? ' on' : ''}`} aria-label={p.tool.label} title={p.tool.label}
+                      onClick={p.tool.onClick}>
+                      {p.tool.icon}
+                    </button>
+                  ) : null}
                   {p.onRemove ? (
                     <button type="button" className="weRemove" aria-label={t.removeImage(p.name)} title={t.removeImage(p.name)}
                       onClick={p.onRemove}>

@@ -1,4 +1,4 @@
-import type { EmoteArt, EmoteFile, EmoteRef, ImportResult } from './emotes';
+import type { EmoteArt, EmoteFile, EmoteRef, ImportResult, SoundResult } from './emotes';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
@@ -88,6 +88,8 @@ export interface SettingsApi {
   importEmote(file: EmoteFile): Promise<ImportResult>;
   /** Deletes an imported emote's files and entry; wheel slots that used it fall back. */
   removeEmote(id: EmoteRef): Promise<void>;
+  /** Gives one of our imported emotes a sound (OGG, MP3 or WAV bytes), or takes it away with null. */
+  setEmoteSound(id: EmoteRef, sound: Uint8Array | null): Promise<SoundResult>;
   getAbout(): Promise<About>;
   openSettingsFolder(): Promise<void>;
   openProjectPage(): Promise<void>;

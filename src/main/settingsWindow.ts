@@ -69,14 +69,51 @@ export function settingsWindow(): BrowserWindow | null {
   return win && !win.isDestroyed() ? win : null;
 }
 
+/** Rebuild macOS sidebar material after a Dock restore or a tray reopen. */
+function reviveVibrancy(w: BrowserWindow): void {
+  w.setVibrancy(null);
+  w.setVibrancy('sidebar');
+}
+
+/** Give the Dock snapshot a solid sidebar in the chat/settings theme; remove it on restore. */
+const MINIMIZED_SIDEBAR_CSS = `
+  [data-platform="mac"] .settings-side { background: var(--surface) !important; }
+`;
+
+/** Key of the minimized-fill stylesheet currently inserted into the settings page, if any. */
+const minimizedCssKeys = new WeakMap<BrowserWindow, string>();
+
+function paintMinimizedSidebar(w: BrowserWindow): void {
+  void w.webContents.insertCSS(MINIMIZED_SIDEBAR_CSS).then((key) => {
+    if (w.isDestroyed()) return;
+    // A restore can beat the insert; the fill would then stay over the live vibrancy.
+    if (w.isMinimized()) {
+      const previous = minimizedCssKeys.get(w);
+      minimizedCssKeys.set(w, key);
+      if (previous) void w.webContents.removeInsertedCSS(previous).catch(() => undefined);
+    } else void w.webContents.removeInsertedCSS(key).catch(() => undefined);
+  }).catch(() => undefined);
+}
+
+function clearMinimizedSidebar(w: BrowserWindow): void {
+  const key = minimizedCssKeys.get(w);
+  minimizedCssKeys.delete(w);
+  if (key) w.webContents.removeInsertedCSS(key).catch(() => undefined);
+}
+
 /** `section`: the id of a settings section to scroll to, e.g. 'room'. */
 export function openSettingsWindow(section?: string): BrowserWindow {
   const existing = settingsWindow();
   if (existing) {
     showInDock(true);
-    if (existing.isMinimized()) existing.restore();
+    const wasMinimized = existing.isMinimized();
+    if (wasMinimized) existing.restore();
     existing.show();
     existing.focus();
+    if (IS_MAC) {
+      clearMinimizedSidebar(existing);
+      if (wasMinimized) reviveVibrancy(existing);
+    }
     if (section) existing.webContents.send(SETTINGS_CH.showSection, section);
     return existing;
   }
@@ -89,9 +126,16 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     icon: nativeImage.createFromPath(buildResourcePath('icon.png')),
     show: false,
     ...chromeOptions(),
-    webPreferences: { preload: preloadPath('settings'), spellcheck: false },
+    webPreferences: { preload: preloadPath('settings'), spellcheck: false, backgroundThrottling: !IS_MAC },
   });
   if (!IS_MAC) w.removeMenu(); // no menu bar, so pressing Alt in the window does nothing (macOS keeps the app menu)
+  if (IS_MAC) {
+    w.on('restore', () => {
+      clearMinimizedSidebar(w); // a click on the window in the Dock restores it without the reopen path
+      reviveVibrancy(w);
+    });
+    w.on('minimize', () => paintMinimizedSidebar(w));
+  }
   const onTheme = () => {
     if (!w.isDestroyed() && !IS_MAC) w.setTitleBarOverlay(captionColors());
   };

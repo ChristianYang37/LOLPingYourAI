@@ -3,9 +3,19 @@ import type { EmoteArt } from '../../src/shared/emotes';
 import { OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
+type Rect = { x: number; y: number; width: number; height: number };
+
 const h = vi.hoisted(() => ({
-  windows: [] as Array<{ x: number; webContents: { send: ReturnType<typeof vi.fn> } }>,
+  windows: [] as Array<{
+    x: number;
+    bounds: Rect;
+    emit: (event: string) => boolean;
+    webContents: { send: ReturnType<typeof vi.fn> };
+    onTop: string[];
+    hiddenInMissionControl: boolean;
+  }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
+  isMac: false,
 }));
 
 vi.mock('electron', async () => {
@@ -15,15 +25,28 @@ vi.mock('electron', async () => {
       return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
     }
     x: number;
+    bounds: Rect;
     webContents = Object.assign(new Emitter(), { send: vi.fn() });
-    constructor(opts: { x: number }) {
+    constructor(opts: Rect) {
       super();
       this.x = opts.x;
+      this.bounds = { x: opts.x, y: opts.y, width: opts.width, height: opts.height };
       h.windows.push(this);
     }
+    /** Every always-on-top level set on it, in order. */
+    onTop: string[] = [];
     setIgnoreMouseEvents(): void {}
-    setAlwaysOnTop(): void {}
-    setBounds(): void {}
+    setAlwaysOnTop(_flag: boolean, level: string): void {
+      this.onTop.push(level);
+    }
+    setVisibleOnAllWorkspaces(): void {}
+    hiddenInMissionControl = false;
+    setHiddenInMissionControl(hidden: boolean): void {
+      this.hiddenInMissionControl = hidden;
+    }
+    setBounds(r: Rect): void {
+      this.bounds = r;
+    }
     showInactive(): void {}
     isDestroyed(): boolean {
       return false;
@@ -39,12 +62,15 @@ vi.mock('electron', async () => {
     getPrimaryDisplay: () => displays[0],
     dipToScreenRect: (_win: unknown, r: unknown) => r,
   });
+  screen.setMaxListeners(0); // every test starts a manager on this one fake screen
   const ipcMain = { on: (channel: string, fn: (event: unknown, raw: unknown) => void) => h.handlers.set(channel, fn) };
   return { BrowserWindow: FakeWindow, ipcMain, screen };
 });
 
 vi.mock('../../src/main/paths', () => ({
-  IS_MAC: false,
+  get IS_MAC() {
+    return h.isMac;
+  },
   loadPage: () => Promise.resolve(),
   preloadPath: () => 'preload.js',
 }));
@@ -61,6 +87,7 @@ const sent = (i: number): Array<[string, unknown]> =>
 beforeEach(async () => {
   h.windows.length = 0;
   h.handlers.clear();
+  h.isMac = false;
   vi.resetModules();
   const { OverlayManager } = await import('../../src/main/overlayManager');
   resolveArt = vi.fn(art);
@@ -196,5 +223,87 @@ describe('Agent reply queue', () => {
   it('skips removed displays rather than stranding later replies', () => {
     loaded(0); mgr.spawnAgent(reply(99)); mgr.spawnAgent(reply(1));
     expect(sent(0)).toHaveLength(1);
+  });
+});
+
+describe('OverlayManager window bounds', () => {
+  it('leaves the bottom row of each display uncovered on Windows, so the taskbar does not see a full-screen app', () => {
+    for (const w of h.windows) w.emit('ready-to-show');
+    expect(h.windows.map((w) => w.bounds)).toEqual([
+      { x: 0, y: 0, width: 1920, height: 1079 },
+      { x: 1920, y: 0, width: 1280, height: 1023 },
+    ]);
+  });
+
+  it('keeps pings where they were placed, since the window still starts at the display\'s corner', () => {
+    mgr.handle({ type: 'click', x: 1920 + 300, y: 400, wheel: 'ping' });
+    expect(sent(1)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 300, y: 400 }]]);
+  });
+
+  it('covers the whole display on macOS', async () => {
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    for (const w of h.windows) w.emit('ready-to-show');
+    expect(h.windows.map((w) => w.bounds)).toEqual([
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      { x: 1920, y: 0, width: 1280, height: 1024 },
+    ]);
+  });
+
+  it('keeps every overlay out of Mission Control on macOS, and leaves Windows alone', async () => {
+    expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([false, false]);
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([true, true]);
+  });
+});
+
+describe('OverlayManager z-order', () => {
+  /** Levels set on each window after it was created. */
+  const raised = (): string[][] => h.windows.map((w) => w.onTop.slice(1));
+
+  it('puts the overlay back on top on Windows before it shows a wheel, a ping, an emote or a toast', () => {
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mgr.spawnRemote({ displayId: 2, x: 1, y: 1, id: 'danger', tag: { name: 'Bot', color: 0 } });
+    mgr.previewEmote('okay');
+    mgr.toast('t', 'b');
+    expect(raised()).toEqual([['screen-saver', 'screen-saver', 'screen-saver'], ['screen-saver']]);
+  });
+
+  it('re-raises each queued agent reply only when it starts, without changing display coordinates', () => {
+    for (const w of h.windows) (w.webContents as unknown as { emit: (event: string) => void }).emit('did-finish-load');
+    mgr.spawnAgent({ displayId: 1, id: 'missing', x: 20, y: 30, tag: { name: 'AI', color: 4 } });
+    mgr.spawnAgent({ displayId: 2, id: 'missing', x: 40, y: 50, tag: { name: 'AI', color: 4 } });
+    expect(raised()).toEqual([['screen-saver'], []]);
+    const first = sent(0).find(([channel]) => channel === 'agent:ping')![1] as { requestId: number };
+    h.handlers.get('overlay:agent-ping-ended')!({ sender: h.windows[0].webContents }, first.requestId);
+    expect(raised()).toEqual([['screen-saver'], ['screen-saver']]);
+    expect(sent(1).at(-1)).toEqual(['agent:ping', expect.objectContaining({ x: 40, y: 50 })]);
+  });
+
+  it('leaves the z-order alone while a wheel moves, ends, or settings change', () => {
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mgr.handle({ type: 'wheelMove', x: 110, y: 210, wheel: 'ping' });
+    mgr.handle({ type: 'wheelRelease', x: 120, y: 220, wheel: 'ping' });
+    mgr.updateSettings(overlaySettings(DEFAULT_SETTINGS));
+    expect(raised()).toEqual([['screen-saver'], []]);
+  });
+
+  it('never touches it again on macOS, where the panel stays on top', async () => {
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    const mac = new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt);
+    mac.start();
+    mac.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mac.previewPing('danger');
+    expect(raised()).toEqual([[], []]);
   });
 });

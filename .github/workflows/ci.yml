@@ -62,6 +62,7 @@ jobs:
       - run: pnpm build
       - run: pnpm exec electron tools/check-chat-ui.cjs
       - run: pnpm exec electron tools/check-agent-pings.cjs
+      - run: pnpm exec electron tools/check-upstream-interactions.cjs
       - if: runner.os == 'macOS'
         run: pnpm exec electron-builder --mac --dir --publish never
       - if: runner.os == 'Windows'
