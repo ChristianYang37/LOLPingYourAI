@@ -3,6 +3,7 @@
 # usage: run.sh <label> <script> [args...]
 # The log goes to $LOG_DIR/HH-MM-SS_<label>.txt; LOG_DIR defaults to ./logs in the current working directory.
 set -e
+set -o pipefail
 [[ $# -ge 2 ]] || { print -u2 "usage: run.sh <label> <script> [args...]"; exit 2; }
 scripts=${0:A:h}
 log_dir=${LOG_DIR:-$PWD/logs}
