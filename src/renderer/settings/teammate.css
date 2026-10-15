@@ -15,3 +15,8 @@
 .ai-candidates > div { display: grid; gap: 5px; width: 140px; }
 .ai-candidates img { width: 128px; height: 128px; object-fit: contain; background: repeating-conic-gradient(#9992 0% 25%, transparent 0% 50%) 50% / 16px 16px; border-radius: 12px; }
 @media (max-width: 800px) { .ai-grid { grid-template-columns: 1fr; } }
+.ai-tabs { display: flex; gap: 8px; margin: 12px 0; }
+.ai-tabs button { border: 1px solid #577b79; border-radius: 9px; padding: 8px 18px; background: transparent; color: inherit; cursor: pointer; }
+.ai-tabs button[aria-pressed=true] { background: #187269; color: white; }
+.ai-setup { border-color: #187269; }.ai-ward { padding: 12px 0; border-bottom: 1px solid #8883; }
+.ai-card > .conversation { max-height: 480px; }.ai-card > .conversation:not(.expanded) { max-height: 280px; }

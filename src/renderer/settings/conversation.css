@@ -1,0 +1,10 @@
+.conversation { display: flex; flex-direction: column; gap: 9px; padding: 12px; min-height: 200px; }
+.conversation header, .conversation footer, .conversation form { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.conversation header img { width: 26px; height: 26px; object-fit: contain; }
+.conversation .spacer { flex: 1; }.conversation-body { flex: 1; overflow: auto; min-height: 0; }
+.conversation small { opacity: .65; }.conversation p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.conversation:not(.expanded) .reply-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.conversation button { border: 1px solid #49857f; background: #1c514f; color: white; border-radius: 6px; padding: 5px 9px; font: inherit; cursor: pointer; }
+.conversation input { min-width: 0; flex: 1; border: 1px solid #637779; border-radius: 6px; background: transparent; color: inherit; padding: 7px; font: inherit; }
+.conversation button:disabled { opacity: .4; }.conversation [role=alert] { color: #ed8888; }
+.conversation pre { white-space: pre-wrap; overflow-wrap: anywhere; }.conversation label { display: block; }.conversation label input { display: block; width: 90%; }

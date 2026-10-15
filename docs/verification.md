@@ -2,6 +2,31 @@
 
 The macOS + Codex desktop-control loop was exercised with a real model and an isolated editable Test Board. This is a local demo, not a claim that every platform and manual acceptance case has passed.
 
+## Teammate UX and DSH preview — 2026-10-15
+
+- Added a small inactive reply card with expand/copy/follow-up, task status and LoL status icons; settings now group teammate, signals, emotes and wards and offer a first-run connection/permission check. Ordinary pings queue, urgent corrections revoke desktop actions before cancellation, and ward operations leave the active turn intact.
+- Reasoning uses an ordinal index: 0 selects the model's lowest advertised level, 1 the next, and out-of-range values clamp to the highest. A real Codex turn resolved the default to `low`. Tests cover models with different available levels and the actual App Server request field.
+- Real macOS + Codex testing used the development Electron app and an isolated local Safari test board: a screenshot ping read `PENGUIN`, sent a reverse ping, displayed its answer in the card, and answered a card follow-up with `企鹅。` without changing the page. The subsequent final-answer display adjustment was built and typechecked; a full model-driven editing/interruption scenario was not repeated for this revision.
+- Downloaded official DeepSeek Harness and installed `@deepseek-ai/dsh@0.2.0-rc.2`. Real ACP initialization, session creation/resume and MCP discovery passed, including the example SiliconFlow profile. No provider key was available, so no Chinese API inference or DSH desktop-control success is claimed. The configured free trial model is text-only.
+- TypeScript checking passed; Vitest passed 709 tests with 1 skipped; all 44 AI bridge tests passed. The skill validator passed. Tests include cancellation during a late turn start, arrival-order preservation during asynchronous window lookup, ward actions while locked and text-only model admission.
+- Built the Apple Silicon DMG and installed the app. Strict deep code-signature verification passed. No new SHA-256 verification or checksum artifact was performed. The new installed app's connection checks passed, but its own helper reported both desktop permissions unavailable after replacement; renewed macOS authorization is pending. Earlier permission evidence below applies to earlier builds.
+- No authenticated Claude run or Windows hardware test was performed. This preview is local; it has not replaced the published v0.1.0 release.
+
+The sections below retain historical evidence for their dated builds.
+
+### Bailian API follow-up — 2026-10-15
+
+- Configured a user-owned, model-restricted Bailian key in DSH's private credential store and used the workspace-specific OpenAI-compatible endpoint. The selected `qwen3.8-flash` model had free quota; its stop-when-exhausted control was enabled and verified before requests. No credential or workspace endpoint is included in source.
+- Real DSH inference returned `BAILIAN DSH OK`. A synthetic 512×512 image was recognized as `ORBIT42` and red/blue circles with reasoning `off`. The initial image answer named only the colors; a fresh session with an explicit two-field request returned both fields. This establishes API image input, not desktop-control accuracy.
+- Restarted the installed app with DSH selected. Its ACP capability check reported image support. The app's helper now reports Screen Recording enabled and Accessibility unavailable; DSH desktop actions remain unverified. No rebuild or resigning was needed for this provider configuration.
+
+### Installed DSH desktop follow-up — 2026-10-15
+
+- After the user renewed Accessibility, the installed helper reported both Accessibility and Screen Recording enabled. No reinstall or signature change was required.
+- A real assist ping through the installed app and DSH/Bailian read `PENGUIN` from a local Safari fixture, called `get_context`, sent an `onmyway` reply ping, clicked its textarea, selected all and typed `DSH desktop OK`, verified a fresh screenshot, restored `Original note.`, verified another screenshot and saved a handoff. The app finished with `busy: false`, phase `done`, reasoning `off` and the model's Chinese result in its reply card.
+- The fixture independently recorded both actual input values, and a separate accessibility-tree read confirmed the final restored text. Only this disposable note was authorized for edits. Test captures, local session IDs and input-event logs remain outside Git.
+- The first attempt was blocked by `Target window is missing or ambiguous`: two Safari windows shared identical bounds, and that installed native helper matched accessibility windows by bounds. Stopping that active DSH turn succeeded. Resizing only the disposable window made its bounds unique and the retry passed. This was a limitation of that installed build. The subsequent source repair and independent native-helper regression are recorded below; a complete DSH model-driven run with the new helper has not been repeated.
+
 ## Upstream installation
 
 - Upstream: lolPing v0.5.1; source commit `f24a51e5a11c2b31dab72d89a571cc4025ad3c98`.
@@ -14,7 +39,7 @@ The macOS + Codex desktop-control loop was exercised with a real model and an is
 | Combination | Implementation | Evidence |
 | --- | --- | --- |
 | macOS arm64 + Codex | App Server, project MCP, Swift/CG/AX helper | Real screenshot, model interpretation, reverse-ping calls, text editing, interruption, restoration and window resize |
-| macOS + Claude | Agent SDK, project MCP, same helper | SDK import verified; no authenticated Claude run |
+| macOS + Claude | Agent SDK, project MCP, same helper | Source and protocol tests; no accepted authenticated Claude desktop run |
 | Windows + Codex | Same App Server adapter; Win32 helper and DPI conversions | Source and CI configuration only; Windows helper not compiled or run here |
 | Windows + Claude | Agent SDK + Win32 project backend | Source only; no Windows/Claude run |
 
@@ -110,3 +135,16 @@ At the time of the first local verification, no GitHub repository had been creat
 - Preserved the supplied 1254×1254 PNG as `build/icon.png`; both language READMEs display it. Generated Windows ICO frames at 16, 24, 32, 48, 64, 128 and 256 pixels and decoded every frame successfully.
 - Packaged the same logo for the settings/window icon on both platforms; Windows tray branding uses it too. macOS retains the existing monochrome menu-bar status glyphs. Updated artwork attribution.
 - Typecheck, 26 existing window/tray tests and production build passed after the change. Rebuilt the Apple Silicon DMG, passed strict deep signature verification, and visually inspected the icon extracted from the final app's ICNS. The installed app was not replaced.
+
+
+## Integration review — 2026-10-15
+
+- PR #2 was reverted at the owner's request. Its SDK 0.3 upgrade, strict MCP setting, stream-close implementation and contributor-reported authenticated verification are excluded from this integration. The SDK and lockfile remain on the pre-PR version (0.2.141 resolved).
+- This branch retains its own model/effort readiness barrier and input-lifecycle tracking. A waiting follow-up checks the cancelled turn record before submitting a new prompt; it does not restore PR #2's cancellation-epoch implementation. Regression tests cover cancellation and eager input consumption before model settings are ready.
+- DSH reserves in-flight session setup and discards a prompt cancelled before submission; ACP approvals require an offered one-time option. Thinking defaults to enabled, independently of the ordinal effort index. DSH indices count only enabled native levels; the off switch is separate. No prompt-based imitation of native effort is added. Earlier Bailian inference at `off` is historical, not a test of the new default.
+- The settings picker loads the selected harness's live catalog, preserves independent choices, and defaults fast mode to false. Codex sends the chosen model and explicit `serviceTier: default` when fast is off; Claude applies session-scoped `fastMode: false`; DSH uses ACP model selection and does not invent a fast-mode feature.
+- Real metadata-only probes returned GPT-6.1 Sol and GPT-6 Astra from the installed Codex App Server and the Bailian ACP model list. A fresh DSH process passed initialization, creation, MCP mount, close and resume without inference.
+- CI checks that the shipped SDK imports, its bundled CLI starts with `--version`, and packaged sharp produces a PNG. It never authenticates or submits a model request.
+- Authenticated Claude desktop work, a DSH model-driven loop with this integrated helper and default thinking, and Windows hardware remain unverified. Earlier installed-app evidence is dated above; the installed application was not replaced during PR review.
+- After the revert: 56 AI tests and 709 Vitest cases passed (one existing skip); typecheck and production build passed. A real SDK 0.2.141 metadata-only probe returned default, Sonnet, Sonnet 1M and Haiku; this session advertised no fast-capable Claude model. The UI follows the returned capability rather than inventing support.
+- The reverted-dependency Apple Silicon package passed SDK import, bundled native Claude Code 2.1.141 startup, packaged sharp image generation, and strict deep code-signature verification.

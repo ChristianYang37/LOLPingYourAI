@@ -8,6 +8,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
   if (message.id === undefined) return;
   if (message.method === 'initialize') return send({ id: message.id, result: {} });
   if (!initialized) return send({ id: message.id, error: { message: 'Not initialized' } });
+  if (message.method === 'model/list') return send({ id: message.id, result: { data: [{ model: 'test', isDefault: true, supportedReasoningEfforts: [{reasoningEffort:'low'}, {reasoningEffort:'high'}] }] } });
   if (message.method === 'thread/start') return send({ id: message.id, result: { thread: { id: 'thread-1' } } });
   if (message.method === 'turn/start') {
     send({ id: message.id, result: { turn: { id: 'turn-1' } } });

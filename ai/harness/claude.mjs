@@ -1,3 +1,4 @@
+import { chooseEffort } from './effort.mjs';
 import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -27,14 +28,26 @@ export class ClaudeAdapter extends EventEmitter {
   async capabilities() { await this.load(); return { images: true, steer: 'after-current-turn', interrupt: true, desktop: 'project-mcp', context: contextTools, nativeDesktop: false }; }
   async create() { const id = randomUUID(); return id; }
   async resume(id) { this.known.add(id); return id; }
-  async send(id, prompt, image) {
+  async listModels() {
+    const { query } = await this.load();
+    let release; const held = new Promise(resolve => { release = resolve; });
+    async function* input() { await held; }
+    const stream = query({ prompt: input(), options: { cwd: this.cwd, tools: [], mcpServers: {}, settings: { fastMode: false }, ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}) } });
+    try { const models = await stream.supportedModels(); return { models: models.map(m => ({ id: m.value, name: m.displayName, fastMode: Boolean(m.supportsFastMode), efforts: m.supportedEffortLevels ?? [] })), defaultModel: models.find(m => m.value === 'default')?.value ?? models[0]?.value }; }
+    finally { release(); stream.close(); }
+  }
+  async send(id, prompt, image, settings = {}) {
+    this.selection = { model: '', fastMode: false, ...this.selection, ...settings };
+    this.effort = settings.reasoningEffort ?? this.effort ?? 0;
     if (this.active.has(id)) throw new Error('Claude turn is still active');
     const { query } = await this.load();
     const content = [{ type: 'text', text: prompt }];
     if (image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: (await readFile(image)).toString('base64') } });
     const skill = await readFile(this.skillPath, 'utf8');
     const refuse = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
-    const options = { cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
+    this.effectiveEffort = chooseEffort(this.effort, ['low', 'medium', 'high']);
+    const options = { effort: this.effectiveEffort, ...(this.selection.model ? { model: this.selection.model } : {}), settings: { fastMode: this.selection.fastMode }, cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
+
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       // Hooks run before settings allow-rules, so a user's global allow list cannot widen this teammate's tools.
       hooks: { PreToolUse: [{ hooks: [async input => { const reason = toolPolicy(input.tool_name, input.tool_input ?? {}, this.cwd); return reason ? refuse(reason) : {}; }] }] },
@@ -43,16 +56,37 @@ export class ClaudeAdapter extends EventEmitter {
     const message = text => ({ type: 'user', session_id: id, parent_tool_use_id: null, message: { role: 'user', content: typeof text === 'string' ? [{ type: 'text', text }] : text } });
     // One user message per turn: a queued reaction is written only after the previous turn's result, so turns never merge.
     async function* messages() {
+      record.inputClosed = false;
+      try {
+      await record.settingsReady;
+      if (record.cancelled) return;
       yield message(content);
       for (let turn = 1; ; turn++) {
         while (record.results < turn && !record.closed) await new Promise(resolve => { record.wake = resolve; });
         if (record.closed || record.cancelled || !record.followUps.length) return;
         yield message(record.followUps.splice(0).join('\n\n'));
       }
+      } finally { record.inputClosed = true; }
     }
     const start = resume => {
       Object.assign(record, { results: 0, stderr: '' });
+      let settingsReady, settingsFailed;
+      record.settingsReady = new Promise((resolve, reject) => { settingsReady = resolve; settingsFailed = reject; });
+      record.settingsReady.catch(() => {});
       record.stream = query({ prompt: messages(), options: { ...options, stderr: data => { record.stderr = (record.stderr + data).slice(-4000); }, ...(resume ? { resume: id } : { sessionId: id }) } });
+      void (async () => {
+        if (!record.stream.supportedModels || !record.stream.applyFlagSettings) return;
+        const models = await record.stream.supportedModels();
+        const requested = this.selection.model;
+        const model = requested ? models.find(m => m.value === requested || m.resolvedModel === requested) : models.find(m => m.value === 'default') ?? models[0];
+        if (!model) throw new Error('Selected Claude model is unavailable. Reload the model list.');
+        if (this.selection.fastMode && !model.supportsFastMode) throw new Error('Selected Claude model does not support fast mode');
+        this.effectiveModel = model.resolvedModel ?? model.value; this.effectiveFastMode = this.selection.fastMode;
+        const supported = model.supportsEffort === false ? [] : model.supportedEffortLevels ?? ['low', 'medium', 'high'];
+        this.effectiveEffort = chooseEffort(this.effort, supported);
+        await record.stream.applyFlagSettings({ fastMode: this.selection.fastMode, ...(this.effectiveEffort ? { effortLevel: this.effectiveEffort } : {}) });
+      })().then(settingsReady, settingsFailed);
+
     };
     start(this.known.has(id));
     this.active.set(id, record);
@@ -62,7 +96,8 @@ export class ClaudeAdapter extends EventEmitter {
         for (;;) {
           try {
             for await (const message of record.stream) {
-              this.emit('event', { method: 'claude/message', params: message });
+              if (message.type === 'system' && message.subtype === 'init') this.model = message.model;
+              this.emit('event', { method: 'claude/message', params: { ...message, threadId: id } });
               if (message.session_id) this.known.add(message.session_id);
               if (message.type === 'result') { if (message.is_error) status = 'failed'; record.results++; record.wake?.(); }
             }
@@ -79,7 +114,7 @@ export class ClaudeAdapter extends EventEmitter {
     return id;
   }
   // Claude has no mid-turn steering here. Deliver the reaction after the current turn rather than interrupting its work.
-  async steer(id, prompt, image) { const record = this.active.get(id); if (!record || record.closed || image) { await record?.finished; return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
+  async steer(id, prompt, image) { const record = this.active.get(id); if (!record || record.closed || record.inputClosed || image) { await record?.finished; if (record?.cancelled) throw new Error('Follow-up cancelled'); return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
   async cancel(id) {
     const record = this.active.get(id); if (!record) return;
     record.cancelled = true; record.followUps.length = 0; record.wake?.(); await record.stream.interrupt();

@@ -1,9 +1,10 @@
+import { chooseEffort } from './effort.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 
 export class CodexAdapter extends EventEmitter {
-  constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); }
+  constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); this.models = new Map(); this.cancelEpoch = new Map(); this.effort = 0; }
   // Every caller waits for the same initialization; requests sent before `initialized` would be rejected.
   connect() { return this.ready ??= this.start().catch(error => { this.ready = null; throw error; }); }
   async start() {
@@ -62,24 +63,44 @@ export class CodexAdapter extends EventEmitter {
   }
   async create() {
     await this.connect();
-    const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write' });
-    this.loaded.add(result.thread.id); return result.thread.id;
+    const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write', serviceTier: 'default' });
+    this.loaded.add(result.thread.id); this.models.set(result.thread.id, result.model); return result.thread.id;
   }
-  async resume(id) { await this.connect(); if (!this.loaded.has(id)) { await this.rpc('thread/resume', { threadId: id }); this.loaded.add(id); } return id; }
+  async resume(id) { await this.connect(); if (!this.loaded.has(id)) { const result = await this.rpc('thread/resume', { threadId: id }); this.models.set(id, result.model); this.loaded.add(id); } return id; }
   async list() { await this.connect(); return (await this.rpc('thread/list', { limit: 30, cwd: this.cwd })).data ?? []; }
-  async send(id, prompt, image) {
+  async modelCatalog() {
+    await this.connect(); const models = []; let cursor;
+    do { const page = await this.rpc('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) }); models.push(...(page.data ?? [])); cursor = page.nextCursor; } while (cursor);
+    return models;
+  }
+  fastTier(model) { return (model.serviceTiers ?? []).find(t => ['fast', 'priority'].includes(t.id))?.id ?? (model.additionalSpeedTiers ?? []).find(t => ['fast', 'priority'].includes(t)); }
+  async listModels() { const models = await this.modelCatalog(); return { models: models.map(m => ({ id: m.model, name: m.displayName ?? m.model, fastMode: Boolean(this.fastTier(m)), efforts: m.supportedReasoningEfforts?.map(e => e.reasoningEffort) ?? [] })), defaultModel: models.find(m => m.isDefault)?.model }; }
+  async send(id, prompt, image, options = {}) {
+    this.effort = options.reasoningEffort ?? this.effort;
+    this.selection = { model: '', fastMode: false, ...this.selection, ...options };
+    const catalog = await this.modelCatalog();
+    const model = this.selection.model ? catalog.find(m => m.model === this.selection.model || m.id === this.selection.model) : catalog.find(m => m.isDefault) ?? catalog.find(m => m.model === this.models.get(id));
+    if (!model) throw new Error('Selected Codex model is unavailable. Reload the model list.');
+    const fastTier = this.fastTier(model);
+    if (this.selection.fastMode && !fastTier) throw new Error('Selected Codex model does not advertise fast mode');
+    if (image && model.inputModalities && !model.inputModalities.includes('image')) throw new Error('Selected Codex model does not support images');
+    const effort = this.effectiveEffort = chooseEffort(this.effort, (model.supportedReasoningEfforts ?? []).map(e => e.reasoningEffort));
+    const serviceTier = this.selection.fastMode ? fastTier : 'default';
+    this.effectiveModel = model.model; this.effectiveFastMode = this.selection.fastMode;
     const input = [{ type: 'text', text: `$lolping-your-ai\n${prompt}` }, { type: 'skill', name: 'lolping-your-ai', path: this.skillPath }];
     if (image) input.push({ type: 'localImage', path: image });
-    const result = await this.rpc('turn/start', { threadId: id, input });
+    const result = await this.rpc('turn/start', { threadId: id, input, model: model.model, serviceTier, ...(effort ? { effort } : {}) });
     this.active.set(id, result.turn.id); return result.turn.id;
   }
   async steer(id, prompt, image) {
+    const epoch = this.cancelEpoch.get(id);
     const turn = this.active.get(id); if (!turn) return this.send(id, prompt, image);
     const input = [{ type: 'text', text: prompt }]; if (image) input.push({ type: 'localImage', path: image });
     try { return await this.rpc('turn/steer', { threadId: id, expectedTurnId: turn, input }); }
-    catch (error) { if (!this.active.has(id)) return this.send(id, prompt, image); throw error; }
+    catch (error) { if (this.cancelEpoch.get(id) !== epoch) throw new Error('Follow-up cancelled'); if (!this.active.has(id)) return this.send(id, prompt, image); throw error; }
   }
   async cancel(id) {
+    this.cancelEpoch.set(id, (this.cancelEpoch.get(id) ?? 0) + 1);
     const turn = this.active.get(id); if (!turn) return;
     let listener, timer;
     const finished = new Promise((resolve, reject) => {

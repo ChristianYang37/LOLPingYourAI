@@ -37,7 +37,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
   { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
   { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
   { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
-  { id: 'teammate', label: () => 'AI Teammate / 队友', icon: <PeopleCommunity24Regular /> },
+  { id: 'teammate', label: t => t.lang.startsWith('zh') ? 'AI 队友' : 'AI Teammate', icon: <PeopleCommunity24Regular /> },
   { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
 ];
 

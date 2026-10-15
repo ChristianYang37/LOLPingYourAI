@@ -1,0 +1,28 @@
+# DSH 0.2.0-rc.2. Credential is resolved by DSH; never put a key in this file.
+# Qwen3-8B was listed at zero cost on SiliconFlow's pricing page on 2026-10-15.
+# This route is TEXT ONLY: use it for a connection/reaction trial, not screenshot work.
+- id: llm-pi-ai
+  config:
+    providers:
+      siliconflow:
+        displayName: SiliconFlow
+        apiKeyEnv: SILICONFLOW_API_KEY
+        api: openai-completions
+        baseURL: https://api.siliconflow.cn/v1
+        compat:
+          thinkingFormat: qwen
+          supportsReasoningEffort: false
+          supportsDeveloperRole: false
+          supportsStore: false
+        models:
+          - id: Qwen/Qwen3-8B
+            input: [text]
+            contextWindow: 131072
+            maxTokens: 4096
+            reasoningEfforts:
+              off:
+              high: high
+- id: acp
+  config:
+    provider: siliconflow
+    model: Qwen/Qwen3-8B

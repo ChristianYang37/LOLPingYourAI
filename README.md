@@ -6,7 +6,7 @@
 
 **Ping anywhere on your desktop. Your AI teammate gets the context.**
 
-Hold <kbd>⌥ Option</kbd>, drag, release on a signal. A League-style ping sends the spot you pointed at, the window it belongs to and what the signal means to your Codex or Claude teammate. It pings back, explains, works in that window, and stops the moment you call **Danger**.
+Hold <kbd>⌥ Option</kbd>, drag, release on a signal. A League-style ping sends the spot you pointed at, the window it belongs to and what the signal means to your Codex, Claude or DSH teammate. It pings back, explains, works in that window, and stops the moment you call **Danger**.
 
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/releases/latest"><img src="https://img.shields.io/github/v/release/ChristianYang37/LOLPingYourAI?label=release&color=c8aa6e&labelColor=0a1428" alt="Latest release"></a>
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ChristianYang37/LOLPingYourAI/ci.yml?branch=main&label=CI&labelColor=0a1428" alt="CI"></a>
@@ -32,7 +32,7 @@ Writing *"in the PDF on the right, second equation, why divide by √d?"* takes 
 - **What:** the window it belongs to (app, title, bounds, a stable window ID).
 - **Intent:** the signal's instruction, such as *explain*, *help finish this*, *stop*, or *check back in 30 minutes*.
 
-The teammate is your existing Codex or Claude harness, with its own model, account, tools and memory. LOLPingYourAI adds no planner and no separate history service. It supplies the ping, a bundled skill and a narrow set of desktop tools.
+The teammate is your existing Codex, Claude or DSH harness, with its own model, account, tools and memory. LOLPingYourAI adds no planner and no separate history service. It supplies the ping, a bundled skill and a narrow set of desktop tools.
 
 <table>
 <tr>
@@ -46,6 +46,18 @@ The teammate is your existing Codex or Claude harness, with its own model, accou
 <td valign="top"><img src="assets/textures/emote_super_approved.png" width="36" alt=""><br><b>Your wheel, your emotes</b><br>Rebind slots and messages, import or crop emotes, or ask the teammate to draw one. Send a <i>Weak!</i> and it may talk back.</td>
 </tr>
 </table>
+
+## Teammate experience
+
+- A small reply card appears near the target without requesting focus. Expand, copy, ask a follow-up or answer a clarification there.
+- Live status uses LoL icons: **received → understanding → working / waiting for you → done**. A completion reaction plays through the existing serial visual-and-sound queue.
+- Normal pings queue behind active work; Danger/Retreat interrupt promptly; All In switches targets. Ward/clear-ward never cancel the active task, and reactions append to its conversation.
+- First-run setup checks the harness and macOS permissions, then offers an observation-only test. Settings have **Teammate / Signals / Emotes / Wards** tabs and an English/Chinese switch. Wards show a countdown, cancel and visit-now controls.
+- Selecting a harness loads its own model catalog. Model and fast-mode choices are saved per harness; fast mode is **off by default**, resets to off when changing models, and only appears enabled when the backend advertises support. Changes apply next turn.
+- Reasoning defaults to **0**, the model's lowest supported level. **1** chooses the next level; larger indices clamp to the model's maximum. The effective level is displayed after a turn starts. DSH defaults to thinking on: its indices count enabled levels, with a separate off switch.
+- **DeepSeek Harness (DSH)** is available through ACP. See [installation, free text API setup and verification limits](docs/dsh.md).
+
+These changes are in the source tree; the v0.1.0 release linked below predates them.
 
 ## Signals
 
@@ -107,7 +119,7 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
   ```
   `LOLPINGAI_CLAUDE` does the same for a specific Claude Code executable.
 - **Approvals**: tool approvals, questions and permission requests from the harness appear under **AI Teammate**. Nothing is silently accepted.
-- **Cost**: your model provider may charge for agent usage. The app supplies no account or API key. Release assets include `SHA256SUMS`.
+- **Cost**: your model provider may charge for agent usage. The app supplies no account or API key.
 
 </details>
 
@@ -116,8 +128,9 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
 | Combination | Status |
 | --- | --- |
 | macOS Apple Silicon + **Codex** | ✅ Real desktop loop tested with a live model (explain, edit, interrupt, restore, maximize, ward). DMG available. |
-| macOS + **Claude** | 🧪 Experimental Agent SDK adapter with read-only context tools. Covered by tests, not yet run with a signed-in account. |
-| Windows + Codex / Claude | 🛠️ Adapters, Win32 helper and installer scripts included. Not validated on a Windows machine yet. |
+| macOS + **Claude** | 🧪 Experimental Agent SDK with read-only context tools. Protocol-tested; authenticated desktop verification is still pending. |
+| macOS + **DSH** | 🧪 Real Bailian screenshot/edit/restore run on the preceding installed helper; current source has protocol and regression coverage. [Setup and limits](docs/dsh.md). |
+| Windows + Codex / Claude / DSH | 🛠️ Adapters, Win32 helper and installer scripts included. Not validated on a Windows machine yet. |
 
 What was actually exercised, and what wasn't, is recorded in [docs/verification.md](docs/verification.md).
 
@@ -184,7 +197,7 @@ pnpm dist                                       # Windows x64 installer (run on 
 | `native/desktop/` | Swift / C# helpers: window lookup, capture, scoped input |
 | `src/main/` | Electron main process, overlays, settings, teammate lifecycle |
 | `src/renderer/` | Ping and emote wheel overlay, React settings window |
-| `ai/` | Teammate service, Codex and Claude adapters, MCP server, local bridge, CLI |
+| `ai/` | Teammate service, Codex, Claude and DSH adapters, MCP server, local bridge, CLI |
 | `skills/lolping-your-ai/` | The skill that teaches the agent what each ping means |
 | `promo/` | Remotion source for the demo video and README media |
 
@@ -195,7 +208,7 @@ The production app ships without an asar archive so its standalone ESM MCP serve
 ## Help wanted
 
 - Run it on **Windows** and report what breaks.
-- A first **signed-in Claude** run through the [acceptance script](docs/acceptance.md).
+- Repeat the **signed-in Claude** [acceptance script](docs/acceptance.md) with the integrated reply card and effort settings.
 - Physical multi-monitor, mixed-DPI and sleep/lock testing.
 - Developer ID signing and notarization for the macOS build.
 - Integrating native Computer Use backends with the shared cancellation gate.

@@ -17,6 +17,14 @@ export class Wards {
     for (const item of this.items) if (item.target.id === windowId && item.status === 'pending') { item.status = 'cancelled'; count++; }
     await this.save(); return count;
   }
+  async update(id, action) {
+    const item = this.items.find(w => w.id === id);
+    if (!item || !['pending', 'failed', 'uncertain'].includes(item.status)) throw new Error('This ward is no longer editable');
+    if (action === 'cancel') item.status = 'cancelled';
+    else if (action === 'now') { item.status = 'pending'; item.dueAt = this.now(); delete item.error; }
+    else throw new Error('Unknown ward action');
+    await this.save(); return item;
+  }
   async tick() {
     if (this.running) return;
     this.running = true;

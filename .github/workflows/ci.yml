@@ -32,3 +32,4 @@ jobs:
         run: pnpm exec electron-builder --mac --dir --publish never
       - if: runner.os == 'Windows'
         run: pnpm exec electron-builder --win --dir --publish never
+      - run: node tools/check-packaged-runtime.cjs release
