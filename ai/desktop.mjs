@@ -23,7 +23,7 @@ export class Desktop {
     if (process.platform !== 'win32') return w;
     return { ...w, bounds: this.electron.screen.screenToDipRect(null, w.bounds) };
   }
-  async resolve(target) { return this.normalizeWindow(await this.native('resolve', { id: target.id, pid: target.pid })); }
+  async resolve(target) { return this.normalizeWindow(await this.native('resolve', { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt })); }
   capture(pointOrTarget, size, tracked = false) {
     const job = this.captureTail.then(() => this.captureNow(pointOrTarget, size, tracked));
     this.captureTail = job.catch(() => {}); return job;
@@ -72,18 +72,18 @@ export class Desktop {
     this.overlays.spawnAgent({ id: this.pingIds[signal] ?? 'generic', displayId: display.id, x: point.x - display.bounds.x, y: point.y - display.bounds.y, tag: { name: caption || 'AI', color: 4 } });
   }
   async action(args, context) {
-    const target = await this.resolve(context.target), identity = { id: target.id, pid: target.pid };
+    const target = await this.resolve(context.target), identity = { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt };
     if (['click', 'scroll'].includes(args.action)) {
       if (![args.x, args.y].every(Number.isFinite)) throw new Error('x and y must be finite global logical coordinates');
       if (JSON.stringify(target.bounds) !== JSON.stringify(context.target.bounds)) throw new Error('Window moved. Take a fresh screenshot before acting.');
       if (args.x < target.bounds.x || args.x >= target.bounds.x + target.bounds.width || args.y < target.bounds.y || args.y >= target.bounds.y + target.bounds.height) throw new Error('Point is outside the target window');
-      return this.native(args.action, { ...identity, ...this.toNativePoint({ x: args.x, y: args.y }), button: args.button, delta: Math.max(-2000, Math.min(2000, Number(args.delta) || 0)) });
+      return this.native(args.action, { ...identity, expectedBounds: process.platform === 'win32' ? this.electron.screen.dipToScreenRect(null, target.bounds) : target.bounds, ...this.toNativePoint({ x: args.x, y: args.y }), button: args.button, delta: Math.max(-2000, Math.min(2000, Number(args.delta) || 0)) });
     }
     if (args.action === 'type') { if (typeof args.text !== 'string' || args.text.length > 10000) throw new Error('Invalid text'); return this.native('type', { ...identity, text: args.text }); }
     if (args.action === 'key') { if (typeof args.key !== 'string' || args.key.length > 50) throw new Error('Invalid key'); return this.native('key', { ...identity, key: args.key }); }
     if (['maximize', 'restore'].includes(args.action)) {
       let bounds;
-      const key = `${target.pid}:${target.id}`;
+      const key = `${target.pid}:${target.processStartedAt ?? ""}:${target.id}`;
       if (args.action === 'maximize') { if (!this.savedBounds.has(key)) this.savedBounds.set(key, target.bounds); bounds = this.electron.screen.getDisplayMatching(target.bounds).workArea; }
       else { bounds = this.savedBounds.get(key); if (!bounds) throw new Error('No original window bounds saved'); }
       const result = await this.native('resize', { ...identity, bounds: process.platform === 'win32' ? this.electron.screen.dipToScreenRect(null, bounds) : bounds });

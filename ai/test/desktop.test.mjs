@@ -36,3 +36,34 @@ test('a moved target refuses stale coordinate actions', async () => {
   const desktop = new Desktop({}); desktop.resolve = async () => ({ id: '1', pid: 2, bounds: { x: 20, y: 0, width: 100, height: 100 } });
   await assert.rejects(desktop.action({ action: 'click', x: 25, y: 25 }, { target: { bounds: { x: 0, y: 0, width: 100, height: 100 } } }), /Window moved/);
 });
+
+test('resolve preserves the process birth marker instead of silently rebinding a PID', async () => {
+  const desktop = new Desktop({});
+  desktop.native = async (op, args) => {
+    assert.equal(op, 'resolve'); assert.deepEqual(args, { id: '12', pid: 34, processStartedAt: 123.5 });
+    throw new Error('Target process restarted; select the window again');
+  };
+  await assert.rejects(desktop.resolve({ id: '12', pid: 34, processStartedAt: 123.5 }), /process restarted/);
+});
+
+test('coordinate actions carry the observed bounds for native revalidation', async () => {
+  const target = { id: '12', pid: 34, processStartedAt: 123.5, bounds: { x: 10, y: 20, width: 300, height: 200 } };
+  const desktop = new Desktop({ electron: { screen: { dipToScreenPoint: p => p, dipToScreenRect: (_, b) => b } } });
+  desktop.resolve = async () => target;
+  desktop.native = async (op, args) => {
+    assert.equal(op, 'click'); assert.deepEqual(args.expectedBounds, target.bounds);
+    assert.equal(args.processStartedAt, target.processStartedAt);
+    // Simulate a move between JS resolve and native dispatch. The failure must reach the agent.
+    throw new Error('Window moved. Take a fresh screenshot before acting.');
+  };
+  await assert.rejects(desktop.action({ action: 'click', x: 30, y: 50 }, { target }), /Window moved/);
+});
+
+test('window restore state is not inherited by a reused PID and window ID', async () => {
+  let target = { id: '12', pid: 34, processStartedAt: 100, bounds: { x: 0, y: 0, width: 100, height: 100 } };
+  const desktop = new Desktop({ electron: { screen: { getDisplayMatching: () => ({ workArea: target.bounds }), dipToScreenRect: (_, b) => b } } });
+  desktop.resolve = async () => target; desktop.native = async () => ({ ok: true });
+  await desktop.action({ action: 'maximize' }, { target });
+  target = { ...target, processStartedAt: 200 };
+  await assert.rejects(desktop.action({ action: 'restore' }, { target }), /No original window bounds saved/);
+});

@@ -95,3 +95,11 @@ At the time of the first local verification, no GitHub repository had been creat
 - CLI: `help`, command validation before contacting the app, and the "start the app" hint only when the app is actually unreachable.
 - Typecheck passed; Vitest 709 passed / 1 skipped; AI bridge tests 31 passed (9 new). New tests drive a stand-in App Server over real stdio JSON-RPC (the concurrency and crash tests fail against the previous adapter), a stand-in Agent SDK that consumes streamed input per turn, the tool policy, and the CLI against a real local bridge. Real Electron asset and five-reply queue checks passed again. C++ helper: 411 passed.
 - Not verified live: no Claude credentials were available on the test machine (the SDK reported "Not logged in"), and Codex CLI was not installed there, so no model-driven turn was repeated for this revision. Earlier live Codex evidence above still describes the desktop loop.
+
+
+## macOS window identity regression — 2026-10-15
+
+- Exact CG window ID to AX identity replaces the rectangle-only match. Focus, hit-test and observed-bounds checks reject stale or ambiguous input; process launch markers remain attached to window identities.
+- Live Electron suite: 10/10 cases. Chrome: 30 alternating edits between identical overlapping windows. Safari: 10 alternating edits on the final helper. Both browsers passed stale/fresh movement, modal-input rejection with no deferred text after dismissal, original-text restoration and closed-window rejection. Some attempted runs safely stopped on focus changes; no zero-refusal or universal app-compatibility claim is made.
+- Independent PR checkout: 34 AI tests; 709 Vitest passes and one skip (seven helper cases passed after their missing build prerequisite was compiled); typecheck, native builds, production build, Apple Silicon DMG packaging and strict deep signature verification passed. No new SHA-256 check. The installed app was not replaced.
+- See [window identity design and test evidence](window-identity.md) for reproduction, discovered browser issues, private-SPI dependency, conservative refusals and untested boundaries.
