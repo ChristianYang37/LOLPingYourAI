@@ -43,9 +43,11 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   const iconJob = new IconJob({ icons, mcp, makeAdapter: (connection: any, harness: keyof typeof adapters) => makeAdapters(connection)[harness], notice: (text: string) => service.notice(text) });
   mcp.env.LOLPINGAI_ENDPOINT = bridge.endpoint; mcp.env.LOLPINGAI_TOKEN = bridge.token;
   service.on('notice', (message: string) => overlays.toast('LOLPingYourAI', message));
-  const view = () => ({ ...service.status(), iconGenerating: Boolean(iconJob.job), language: resolveLang(settings.get().language, app.getLocale()), customEmotes: settings.get().customEmotes });
+  const view = () => ({ ...service.status({ diagnostic: false }), iconGenerating: Boolean(iconJob.job), language: resolveLang(settings.get().language, app.getLocale()), customEmotes: settings.get().customEmotes });
   companion = new CompanionWindow(view);
-  service.on('change', () => { settingsWindow()?.webContents.send('ai:changed', null); void companion?.update().catch((e: Error) => service.notice(e.message)); });
+  // Stream deltas can arrive much faster than a human-visible frame; coalesce IPC and disk listing work.
+  let changeTimer: ReturnType<typeof setTimeout> | undefined;
+  service.on('change', () => { changeTimer ??= setTimeout(() => { changeTimer = undefined; settingsWindow()?.webContents.send('ai:changed', null); void companion?.update().catch((e: Error) => service.notice(e.message)); }, 80); });
   const enqueue = (signal: string, displayId: number, x: number, y: number) => {
     const d = screen.getAllDisplays().find(d => d.id === displayId); if (!d) return;
     void service.dispatch({ signal: pingMap[signal] ?? signal, point: { x: x + d.bounds.x, y: y + d.bounds.y }, source: 'user' }).catch(() => {});
@@ -60,7 +62,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   const handlers: Record<string, (args: any) => any> = {
     status: view, conversation: args => service.conversation.page(args), config: args => service.configure(args), stop: () => { service.generation++; return Promise.all([service.stop(), iconJob.cancel()]); },
     doctor: () => desktop.doctor(), connection: async () => adapters[service.config.harness as keyof typeof adapters].capabilities(),
-    models: async args => { if (!Object.hasOwn(adapters, args.harness)) throw new Error('Unknown harness'); return adapters[args.harness as keyof typeof adapters].listModels(); },
+    models: args => service.listModels(args),
     message: args => service.message(args), followup: args => service.followup(args), wardAction: args => service.wardAction(args),
     copyReply: () => electron.clipboard.writeText(service.task?.text ?? ''), hideCard: () => companion?.hide(), resizeCard: args => companion?.resize(Boolean(args.expanded)),
     testPing: async () => { await new Promise(resolve => setTimeout(resolve, 3000)); return service.dispatch({ signal: 'missing', point: screen.getCursorScreenPoint(), message: 'Setup test: briefly describe the visible region, then reply with one onmyway ping. Observe only.' }); },
@@ -88,5 +90,5 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   powerMonitor.on('lock-screen', () => { service.generation++; void Promise.all([service.stop(), iconJob.cancel()]).catch((e: Error) => service.notice(e.message)); });
   globalShortcut.register('Control+Alt+Escape', () => { service.generation++; void Promise.all([service.stop(), iconJob.cancel()]).then(() => service.notice('Stopped.')).catch((e: Error) => service.notice(e.message)); });
   if (!service.config.setupComplete) openSettingsWindow('teammate');
-  return { service, open: () => openSettingsWindow('teammate'), close: () => { clearInterval(timer); companion?.close(); iconJob.close(); bridge.close(); service.close(); globalShortcut.unregister('Control+Alt+Escape'); } };
+  return { service, open: () => openSettingsWindow('teammate'), close: () => { clearInterval(timer); clearTimeout(changeTimer); companion?.close(); iconJob.close(); bridge.close(); service.close(); globalShortcut.unregister('Control+Alt+Escape'); } };
 }

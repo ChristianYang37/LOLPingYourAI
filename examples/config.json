@@ -10,5 +10,6 @@
       "prompt": "请用简短中文解释这个区域，必要时提出一个澄清问题。只观察，不修改。"
     }
   },
-  "reasoningEffort": 0
+  "reasoningEffort": 0,
+  "diagnosticsEnabled": false
 }

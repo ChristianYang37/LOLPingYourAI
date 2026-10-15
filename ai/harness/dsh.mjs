@@ -28,11 +28,15 @@ export class DshAdapter extends EventEmitter {
       if (m.method === 'session/request_permission') { this.emit('approval', m); return; }
       if (m.method === 'session/update') {
         const u = m.params.update;
+        this.updateOptions(m.params);
         if (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text') this.emit('event', { method: 'dsh/message', params: { threadId: m.params.sessionId, type: 'assistant', message: { content: [{ type: 'text', text: u.content.text }] } } });
         else this.emit('event', { method: 'dsh/update', params: m.params });
       } else if (m.id !== undefined && m.method) this.child?.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32601, message: 'Unsupported client method' } }) + '\n');
     });
     this.info = await this.rpc('initialize', { protocolVersion: 1, clientInfo: { name: 'lolpingyourai', version: '0.1.0' }, clientCapabilities: {} });
+  }
+  updateOptions({ sessionId, update }) {
+    if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions)) this.loaded.set(sessionId, update.configOptions);
   }
   rpc(method, params, timeout = 60000) {
     return new Promise((resolve, reject) => {
@@ -46,7 +50,11 @@ export class DshAdapter extends EventEmitter {
   sessionParams() { return { cwd: this.cwd, mcpServers: [{ name: 'lolpingyourai', command: this.mcp.command, args: this.mcp.args, env: Object.entries(this.mcp.env ?? {}).map(([name, value]) => ({ name, value })) }] }; }
   async create() { await this.connect(); const r = await this.rpc('session/new', this.sessionParams()); this.loaded.set(r.sessionId, r.configOptions ?? []); this.profileDefaultModel ??= r.configOptions?.find(o => o.id === 'model')?.currentValue; this.defaultModels.set(r.sessionId, r.configOptions?.find(o => o.id === 'model')?.currentValue); return r.sessionId; }
   async resume(id) { await this.connect(); if (!this.loaded.has(id)) { const r = await this.rpc('session/resume', { ...this.sessionParams(), sessionId: id }); this.loaded.set(id, r.configOptions ?? []); } return id; }
-  async listModels() {
+  async listModels({ refresh = false } = {}) {
+    if (refresh) {
+      if (this.active.size || this.preparing.size || this.pending.size) throw new Error('Wait for the current DSH operation before refreshing configuration');
+      await this.close(); this.ready = null; this.loaded.clear(); this.profileDefaultModel = undefined;
+    }
     const id = await this.create();
     try {
       const selector = this.loaded.get(id).find(o => o.id === 'model');
@@ -79,7 +87,7 @@ export class DshAdapter extends EventEmitter {
     if (thinking && supported.length && !enabled.length) throw new Error('This DSH model does not advertise a thinking-on option');
     this.effectiveEffort = effort;
     // Use native ACP/API controls. Prompt wording is a separate signal-mapping feature.
-    if (effort !== undefined) await this.rpc('session/set_config_option', { sessionId: id, configId: 'reasoning_effort', value: effort });
+    if (effort !== undefined && selector?.currentValue !== effort) { const result = await this.rpc('session/set_config_option', { sessionId: id, configId: 'reasoning_effort', value: effort }); if (result.configOptions) this.loaded.set(id, result.configOptions); }
     const prompt = [{ type: 'text', text: `${await readFile(this.skillPath, 'utf8')}\n\n${text}` }];
     if (image) prompt.push({ type: 'image', mimeType: 'image/png', data: (await readFile(image)).toString('base64') });
     if (this.cancelEpoch.get(id) !== epoch) throw new Error('DSH turn cancelled before submission');

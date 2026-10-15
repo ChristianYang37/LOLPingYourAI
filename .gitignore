@@ -17,3 +17,5 @@ native/desktop/build/
 # promo video (Remotion): synced Riot assets and renders stay out of git
 promo/public/
 promo/out/
+
+performance-results/

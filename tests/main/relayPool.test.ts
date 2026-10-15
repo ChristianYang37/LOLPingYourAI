@@ -114,6 +114,7 @@ describe('RelayPool', () => {
     expect(events).toEqual([e]);
   });
 
+  // This exercises 513 real signatures plus verification; shared Windows runners can exceed 5 s.
   it('forgets ids after 512 newer ones', () => {
     pool.start();
     openAll();
@@ -126,7 +127,7 @@ describe('RelayPool', () => {
     vi.advanceTimersByTime(1000);
     from(URLS[1], first);
     expect(events.filter((e) => e.id === first.id)).toHaveLength(2);
-  });
+  }, 20_000);
 
   it('caps incoming events at 200 per second across relays', () => {
     pool.start();

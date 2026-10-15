@@ -19,7 +19,7 @@ export class CodexAdapter extends EventEmitter {
     const child = this.child = spawn(launch.command, [...launch.args, ...args], { cwd: this.cwd, env: { ...process.env, ...this.mcp.env, ...launch.env }, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
     child.stderr.on('data', data => this.emit('diagnostic', data.toString().slice(0, 3000)));
     child.stdin.on('error', () => {}); // Reported through the child's error/exit events.
-    const detach = () => { if (this.child !== child) return false; this.child = null; this.ready = null; this.loaded.clear(); return true; };
+    const detach = () => { if (this.child !== child) return false; this.child = null; this.ready = null; this.loaded.clear(); this.catalog = null; this.catalogRequest = null; return true; };
     child.on('error', error => { if (child.pid === undefined) detach(); this.fail(error); }); // No pid: it never started.
     child.on('exit', () => {
       if (!detach()) return;
@@ -66,23 +66,39 @@ export class CodexAdapter extends EventEmitter {
   async create() {
     await this.connect();
     const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write', serviceTier: 'default' });
+    this.configuredModel ??= result.model;
     this.loaded.add(result.thread.id); this.models.set(result.thread.id, result.model); return result.thread.id;
   }
-  async resume(id) { await this.connect(); if (!this.loaded.has(id)) { const result = await this.rpc('thread/resume', { threadId: id }); this.models.set(id, result.model); this.loaded.add(id); } return id; }
+  async resume(id) { await this.connect(); if (!this.loaded.has(id)) { await this.modelCatalog(); const result = await this.rpc('thread/resume', { threadId: id, excludeTurns: true, ...(this.configuredProvider ? { modelProvider: this.configuredProvider } : {}) }); this.models.set(id, result.model); this.loaded.add(id); } return id; }
   async list() { await this.connect(); return (await this.rpc('thread/list', { limit: 30, cwd: this.cwd })).data ?? []; }
-  async modelCatalog() {
-    await this.connect(); const models = []; let cursor;
-    do { const page = await this.rpc('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) }); models.push(...(page.data ?? [])); cursor = page.nextCursor; } while (cursor);
-    return models;
+  async restart() {
+    if (this.active.size || this.pending.size) throw new Error('Wait for the current Codex operation before refreshing configuration');
+    const child = this.child;
+    this.child = null; this.ready = null; this.loaded.clear(); this.catalog = null; this.catalogRequest = null;
+    if (child) await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('Codex did not exit for configuration reload')), 5000); child.once('exit', () => { clearTimeout(timer); resolve(); }); child.kill(); });
+  }
+  async modelCatalog({ refresh = false } = {}) {
+    await this.connect();
+    if (!refresh && this.catalog) return this.catalog;
+    return this.catalogRequest ??= (async () => {
+      const models = []; let cursor;
+      do { const page = await this.rpc('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) }); models.push(...(page.data ?? [])); cursor = page.nextCursor; } while (cursor);
+      const result = await this.rpc('config/read', { includeLayers: false });
+      this.configuredModel = result.config?.model;
+      this.configuredProvider = result.config?.model_provider || 'openai';
+      if (this.configuredModel && !models.some(m => m.model === this.configuredModel)) models.push({ model: this.configuredModel, displayName: this.configuredModel, configured: true });
+      this.catalog = models; return models;
+    })().finally(() => { this.catalogRequest = null; });
   }
   fastTier(model) { return (model.serviceTiers ?? []).find(t => ['fast', 'priority'].includes(t.id))?.id ?? (model.additionalSpeedTiers ?? []).find(t => ['fast', 'priority'].includes(t)); }
-  async listModels() { const models = await this.modelCatalog(); return { models: models.map(m => ({ id: m.model, name: m.displayName ?? m.model, fastMode: Boolean(this.fastTier(m)), efforts: m.supportedReasoningEfforts?.map(e => e.reasoningEffort) ?? [] })), defaultModel: models.find(m => m.isDefault)?.model }; }
+  async listModels({ refresh = false } = {}) { if (refresh) await this.restart(); const models = await this.modelCatalog({ refresh }); return { models: models.map(m => ({ id: m.model, name: m.displayName ?? m.model, fastMode: Boolean(this.fastTier(m)), efforts: m.supportedReasoningEfforts?.map(e => e.reasoningEffort) ?? [] })), defaultModel: this.configuredModel ?? models.find(m => m.isDefault)?.model }; }
   async send(id, prompt, image, options = {}) {
     this.effort = options.reasoningEffort ?? this.effort;
     this.selection = { model: '', fastMode: false, ...this.selection, ...options };
     const catalog = await this.modelCatalog();
-    const model = this.selection.model ? catalog.find(m => m.model === this.selection.model || m.id === this.selection.model) : catalog.find(m => m.isDefault) ?? catalog.find(m => m.model === this.models.get(id));
-    if (!model) throw new Error('Selected Codex model is unavailable. Reload the model list.');
+    const requested = this.selection.model || this.configuredModel || catalog.find(m => m.isDefault)?.model || this.models.get(id);
+    const model = catalog.find(m => m.model === requested || m.id === requested) ?? (requested ? { model: requested, configured: true } : null);
+    if (!model) throw new Error('No Codex model is configured');
     const fastTier = this.fastTier(model);
     if (this.selection.fastMode && !fastTier) throw new Error('Selected Codex model does not advertise fast mode');
     if (image && model.inputModalities && !model.inputModalities.includes('image')) throw new Error('Selected Codex model does not support images');

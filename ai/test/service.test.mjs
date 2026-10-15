@@ -91,11 +91,30 @@ test('switching harness keeps separate sessions and queues behind former desktop
 
 test('teammate history keeps text but drops screenshot payloads', async () => {
   const { service, adapter } = await fixture(), image = 'iVBORw0KGgo' + 'A'.repeat(300000);
+  await service.configure({ diagnosticsEnabled: true });
   adapter.emit('event', { method: 'claude/message', params: { type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'image', source: { data: image } }, { type: 'text', text: 'Mapped region.' }] }] } } });
   adapter.emit('event', { method: 'item/agentMessage/delta', params: { itemId: 'a', delta: 'Done. ' } }); adapter.emit('event', { method: 'item/agentMessage/delta', params: { itemId: 'a', delta: 'Note restored.' } });
   const [tool, reply] = service.status().history.map(h => h.event.params);
   assert.match(tool.message.content[0].content[0].source.data, /^\[300011 characters of binary data omitted\]$/); assert.equal(tool.message.content[0].content[1].text, 'Mapped region.');
   assert.equal(reply.delta, 'Done. Note restored.'); assert.ok(JSON.stringify(service.status().history).length < 2000);
+});
+
+test('diagnostics default off, disabling clears protocol events but retains chat', async () => {
+  const { service, adapter } = await fixture();
+  assert.equal(service.config.diagnosticsEnabled, false);
+  await service.message({ text: 'Keep this conversation' });
+  const delta = { method: 'item/agentMessage/delta', params: { delta: 'Hello', itemId: 'one' } };
+  adapter.emit('event', delta);
+  assert.deepEqual(service.history, []);
+  assert.equal(service.task.text, 'Hello');
+  await service.configure({ diagnosticsEnabled: true });
+  adapter.emit('event', delta);
+  assert.equal(service.history.length, 1);
+  await service.configure({ diagnosticsEnabled: false });
+  assert.deepEqual(service.history, []);
+  assert.ok(service.conversation.page().entries.some(row => row.text === 'HelloHello'));
+  await assert.rejects(service.configure({ diagnosticsEnabled: 'true' }), /boolean/);
+  service.close();
 });
 
 test('normal pings queue without cancelling; moved targets are captured fresh when admitted', async () => {
@@ -280,4 +299,27 @@ test('Finish setup and signal mappings survive service restart', async () => {
   await service.configure({ setupComplete: true, mappings });
   const restarted = new Teammate({ store: service.store, adapters: { codex: new Adapter() }, desktop: service.desktop }); await restarted.init();
   assert.equal(restarted.config.setupComplete, true); assert.deepEqual(restarted.config.mappings, mappings);
+});
+
+test('refresh never interrupts an active turn; pings queue during native config reload', async () => {
+  const { service, adapter } = await fixture(); await service.message({ text: 'Start' });
+  await assert.rejects(service.listModels({ refresh: true }), /Finish or stop/);
+  adapter.finish();
+  let release; adapter.listModels = () => new Promise(resolve => { release = resolve; });
+  const pending = service.listModels({ refresh: true });
+  assert.equal((await service.message({ text: 'Queued safely' })).queued, true);
+  assert.equal(adapter.sent.length, 1); assert.equal(adapter.cancelled.length, 0);
+  release({ models: [] }); await pending; await service.queue;
+  assert.equal(adapter.sent.length, 2); service.close();
+});
+
+test('Claude partial text appears before completion, complete message does not duplicate it', async () => {
+  const { service, time } = await fixture(); await service.configure({ harness: 'claude' });
+  const adapter = service.adapters.claude, turn = await service.message({ text: 'Hello' });
+  time(150); adapter.emit('event', { method: 'claude/textDelta', params: { threadId: turn.session, delta: 'Hello' } });
+  assert.equal(service.task.text, 'Hello'); assert.equal(service.task.timings.firstTextMs, 50);
+  adapter.emit('event', { method: 'claude/textComplete', params: { threadId: turn.session, streamedText: 'Hello', text: 'Hello there' } });
+  adapter.emit('event', { method: 'claude/message', params: { threadId: turn.session, type: 'assistant', textHandled: true, message: {content:[{type:'text',text:'Hello there'}]} } });
+  assert.equal(service.task.text, 'Hello there'); time(200); adapter.finish();
+  assert.equal(service.task.timings.totalMs, 100); service.close();
 });

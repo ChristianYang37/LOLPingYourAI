@@ -1,3 +1,4 @@
+import { configuredClaudeModels } from './claude-models.mjs';
 import { chooseEffort } from './effort.mjs';
 import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
@@ -32,8 +33,8 @@ export class ClaudeAdapter extends EventEmitter {
     const { query } = await this.load();
     let release; const held = new Promise(resolve => { release = resolve; });
     async function* input() { await held; }
-    const stream = query({ prompt: input(), options: { cwd: this.cwd, tools: [], mcpServers: {}, settings: { fastMode: false }, ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}) } });
-    try { const models = await stream.supportedModels(); return { models: models.map(m => ({ id: m.value, name: m.displayName, fastMode: Boolean(m.supportsFastMode), efforts: m.supportedEffortLevels ?? [] })), defaultModel: models.find(m => m.value === 'default')?.value ?? models[0]?.value }; }
+    const stream = query({ prompt: input(), options: { cwd: this.cwd, tools: [], mcpServers: {}, strictMcpConfig: true, settings: { fastMode: false }, ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}) } });
+    try { const models = [...await stream.supportedModels()]; for (const name of await configuredClaudeModels(this.cwd)) if (!models.some(m => m.value === name || m.resolvedModel === name)) models.push({ value: name, displayName: `${name} (configured)`, supportsEffort: false }); return { models: models.map(m => ({ id: m.value, name: m.displayName, fastMode: Boolean(m.supportsFastMode), efforts: m.supportedEffortLevels ?? [] })), defaultModel: models.find(m => m.value === 'default')?.value ?? models[0]?.value }; }
     finally { release(); stream.close(); }
   }
   async send(id, prompt, image, settings = {}) {
@@ -47,7 +48,7 @@ export class ClaudeAdapter extends EventEmitter {
     const skill = await readFile(this.skillPath, 'utf8');
     const refuse = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
     this.effectiveEffort = chooseEffort(this.effort, ['low', 'medium', 'high']);
-    const options = { effort: this.effectiveEffort, ...(this.selection.model ? { model: this.selection.model } : {}), settings: { fastMode: this.selection.fastMode }, cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
+    const options = { includePartialMessages: true, ...(this.selection.model ? { model: this.selection.model } : {}), settings: { fastMode: this.selection.fastMode }, cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
       // Ignore claude.ai connectors and the user's own MCP settings; this teammate sees only the project server.
       strictMcpConfig: true,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
@@ -81,10 +82,11 @@ export class ClaudeAdapter extends EventEmitter {
         const models = await record.stream.supportedModels();
         const requested = this.selection.model;
         const model = requested ? models.find(m => m.value === requested || m.resolvedModel === requested) : models.find(m => m.value === 'default') ?? models[0];
-        if (!model) throw new Error('Selected Claude model is unavailable. Reload the model list.');
-        if (this.selection.fastMode && !model.supportsFastMode) throw new Error('Selected Claude model does not support fast mode');
-        this.effectiveModel = model.resolvedModel ?? model.value; this.effectiveFastMode = this.selection.fastMode;
-        const supported = model.supportsEffort === false ? [] : model.supportedEffortLevels ?? ['low', 'medium', 'high'];
+        // Native provider IDs are not necessarily in supportedModels; Claude validates them on use.
+        if (!model && !requested) throw new Error('No Claude model is configured');
+        if (this.selection.fastMode && !model?.supportsFastMode) throw new Error('Selected Claude model does not support fast mode');
+        this.effectiveModel = model?.resolvedModel ?? model?.value ?? requested; this.effectiveFastMode = this.selection.fastMode;
+        const supported = !model || model.supportsEffort === false ? [] : model.supportedEffortLevels ?? ['low', 'medium', 'high'];
         this.effectiveEffort = chooseEffort(this.effort, supported);
         await record.stream.applyFlagSettings({ fastMode: this.selection.fastMode, ...(this.effectiveEffort ? { effortLevel: this.effectiveEffort } : {}) });
         this.settingsAcknowledged = true;
@@ -100,7 +102,20 @@ export class ClaudeAdapter extends EventEmitter {
           try {
             for await (const message of record.stream) {
               if (message.type === 'system' && message.subtype === 'init') this.observedModel = message.model;
-              this.emit('event', { method: 'claude/message', params: { ...message, threadId: id } });
+              if (message.type === 'stream_event') {
+                const event = message.event;
+                if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                  record.partialText = (record.partialText ?? '') + event.delta.text;
+                  this.emit('event', { method: 'claude/textDelta', params: { threadId: id, delta: event.delta.text } });
+                }
+              }
+              const completeText = message.type === 'assistant' ? message.message?.content?.filter(c => c.type === 'text').map(c => c.text).join('') : '';
+              // Reconcile the completed message with already rendered deltas, without duplicate text.
+              if (message.type === 'assistant') {
+                this.emit('event', { method: 'claude/textComplete', params: { threadId: id, text: completeText ?? '', streamedText: record.partialText ?? '' } });
+                record.partialText = '';
+              }
+              this.emit('event', { method: 'claude/message', params: { ...message, threadId: id, textHandled: message.type === 'assistant' } });
               if (message.session_id) this.known.add(message.session_id);
               if (message.type === 'result') { if (message.is_error) status = 'failed'; record.results++; record.wake?.(); }
             }

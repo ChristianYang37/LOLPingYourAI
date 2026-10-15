@@ -196,6 +196,7 @@ pnpm typecheck
 pnpm test:helper                                # C++ 输入助手
 pnpm test                                       # Vitest + AI 桥接测试
 pnpm test:acceptance                            # 跨平台验收工具的协议测试
+pnpm test:performance                           # 无 API 的本地性能回归
 pnpm build && pnpm exec electron tools/check-assets.cjs
 pnpm exec electron tools/check-agent-queue.cjs  # 真实覆盖层 + Web Audio 播放队列
 pnpm exec electron tools/test-board.cjs         # 手动测试用的一次性窗口
@@ -236,3 +237,5 @@ pnpm dist                                       # Windows x64 安装包（需在
 基于 [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1 派生，输入助手、轮盘、覆盖层、设置和表情导入都来自它。Copyright © 2026 Danrui Meng，MIT。本仓库代码采用 MIT 许可（[LICENSE](LICENSE)）。
 
 英雄联盟的美术、动画和音效 © Riot Games, Inc.，**不**适用 MIT 许可，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。这是独立的粉丝项目，未获 Riot Games、OpenAI 或 Anthropic 认可。
+
+连接与诊断默认关闭；需要排查时，在设置 → AI 队友中显式开启。关闭后不收集原始协议事件，聊天与信号记录正常保留。性能 CI 的范围、预算及本机测量见[性能测试说明](docs/performance.md)。

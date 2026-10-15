@@ -78,3 +78,11 @@ test('DSH on/off provider keeps thinking on even at ordinal zero', async () => {
   const done = a.active.get(id).finished; finish(); await done;
   await assert.rejects(a.send(id, 'Hi', undefined, { model: 'b', fastMode: true }), /does not expose a fast/);
  });
+
+
+test('DSH config option notifications update loaded model metadata', async () => {
+  const { a } = fixture(); const id = await a.create();
+  const configOptions = [{ id: 'model', currentValue: 'new', options: [{ value: 'new', name: 'New model' }] }];
+  a.updateOptions({ sessionId: id, update: { sessionUpdate: 'config_option_update', configOptions } });
+  assert.deepEqual(a.loaded.get(id), configOptions);
+});

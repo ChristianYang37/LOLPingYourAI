@@ -49,6 +49,16 @@ jobs:
       - if: runner.os == 'Windows'
         run: pnpm test:windows
       - run: pnpm test
+      - name: Local latency regression (no API credentials)
+        run: pnpm test:performance
+      - name: Upload performance measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-${{ matrix.os }}-node${{ matrix.node }}
+          path: performance-results/*.json
+          if-no-files-found: warn
+          retention-days: 30
       - run: pnpm build
       - run: pnpm exec electron tools/check-chat-ui.cjs
       - run: pnpm exec electron tools/check-agent-pings.cjs

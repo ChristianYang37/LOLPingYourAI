@@ -30,7 +30,7 @@ test('Codex sends the resolved effort on every turn without altering user model 
   await a.send('s', 'Hi'); assert.equal(calls.at(-1).params.serviceTier, 'default'); assert.equal(calls.at(-1).params.model, 'model-a');
   await a.send('s', 'Hi', undefined, { model: 'model-a', fastMode: true }); assert.equal(calls.at(-1).params.serviceTier, 'priority');
   await a.send('s', 'Hi', undefined, { model: 'model-b', fastMode: false }); assert.equal(calls.at(-1).params.model, 'model-b'); assert.equal(calls.at(-1).params.effort, 'medium'); assert.equal(calls.at(-1).params.serviceTier, 'default');
-  await assert.rejects(a.send('s', 'Hi', undefined, { model: 'missing' }), /unavailable/);
+  await a.send('s', 'Hi', undefined, { model: 'custom-provider-model', fastMode: false }); assert.equal(calls.at(-1).params.model, 'custom-provider-model'); assert.equal(calls.at(-1).params.effort, undefined);
   await assert.rejects(a.send('s', 'Hi', undefined, { model: 'model-b', fastMode: true }), /does not advertise fast/);
  });
  test('model choices are separate per harness and fast mode requires an explicit boolean', () => {
@@ -39,3 +39,19 @@ test('Codex sends the resolved effort on every turn without altering user model 
   assert.deepEqual(validateConfig({ modelSelections: selections }).modelSelections, selections);
   assert.throws(() => validateConfig({ modelSelections: { codex: { model: 'a', fastMode: 'true' } } }));
  });
+
+test('Codex configured custom model wins over bundled default and catalog is reused between turns', async () => {
+  const a = new CodexAdapter({ mcp: {}, skillPath: '/skill' }), calls = [];
+  a.connect = async () => {};
+  a.rpc = async (method, params) => { calls.push({ method, params });
+    if (method === 'model/list') return { data: [{ model: 'bundled', isDefault: true }] };
+    if (method === 'config/read') return { config: { model: 'gateway-model', model_provider: 'gateway' } };
+    return { turn: { id: 't' } };
+  };
+  assert.equal((await a.listModels()).defaultModel, 'gateway-model');
+  await a.send('s', 'One'); await a.send('s', 'Two');
+  assert.equal(calls.filter(c => c.method === 'model/list').length, 1);
+  assert.equal(calls.at(-1).params.model, 'gateway-model');
+  assert.equal(calls.at(-1).params.effort, undefined);
+  await a.resume('s'); assert.equal(calls.at(-1).params.modelProvider, 'gateway');
+});
