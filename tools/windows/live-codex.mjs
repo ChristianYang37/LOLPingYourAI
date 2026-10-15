@@ -6,8 +6,9 @@ import { join, resolve } from 'node:path';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { Bridge, drive, redactor, statusSummary } from '../acceptance/core.mjs';
 
-export async function liveCodex(directory) {
-  const boardPath = join(directory, 'test-board.json'), evidence = join(directory, 'live-codex.jsonl');
+export async function liveCodex(directory, harness = 'codex') {
+  assert.ok(['codex', 'dsh'].includes(harness), 'Supported live harness');
+  const boardPath = join(directory, 'test-board.json'), evidence = join(directory, `live-${harness}.jsonl`);
   const env = { ...process.env, LOLPINGAI_TEST_BOARD_FILE: boardPath }; delete env.ELECTRON_RUN_AS_NODE;
   const board = spawn(createRequire(import.meta.url)('electron'), [resolve('tools/test-board.cjs'), `--user-data-dir=${join(directory, 'board-profile')}`], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   let error = ''; board.stderr.on('data', d => error += d);
@@ -17,7 +18,7 @@ export async function liveCodex(directory) {
     let ready = false;
     for (let i = 0; i < 150; i++) { try { ready = JSON.parse(await readFile(boardPath, 'utf8')).pid === board.pid; } catch {} if (ready) break; await new Promise(r => setTimeout(r, 100)); }
     assert.ok(ready, `Test Board failed to start: ${error.slice(-1000)}`);
-    await bridge.call('config', { harness: 'codex', setupComplete: true });
+    await bridge.call('config', { harness, setupComplete: true, reasoningEffort: 0 });
     const steps = [
       { signal: 'missing', message: 'Describe only this disposable Test Board, including its note. Send one onmyway reply ping. Do not edit anything.', after: 'done', expectText: 'Ready for a ping.', timeoutMs: 180000 },
       { signal: 'assist', message: 'Only edit this disposable Test Board. Replace the textarea note with this exact string, including the final period: "Ping received." Verify it with a fresh screenshot.', after: 'done', expectText: 'Ping received.', timeoutMs: 180000 },
@@ -28,11 +29,11 @@ export async function liveCodex(directory) {
       let focused = false;
       for(let i=0;i<50;i++) { if(JSON.parse(await readFile(boardPath,'utf8')).focusToken===token) { focused=true;break; } await new Promise(r=>setTimeout(r,100)); }
       assert.ok(focused, 'Test Board acknowledged focus request');
-      await drive(bridge, { harness: 'codex', steps: [step] }, { boardPath, allowActions: true, log });
-      console.log(`Real Codex Test Board: ${step.signal} passed`);
+      await drive(bridge, { harness, steps: [step] }, { boardPath, allowActions: true, log });
+      console.log(`Real ${harness} Test Board: ${step.signal} passed`);
     }
     log({ kind: 'final', ...statusSummary(await bridge.call('status')) }); await writes;
-    console.log('Real Codex observe, edit and restore passed; this does not claim mid-turn cancellation');
+    console.log(`Real ${harness} observe, edit and restore passed; this does not claim mid-turn cancellation`);
   } catch (e) { await bridge.call('stop').catch(() => {}); log({ kind: 'failed', message: e.message }); await writes; throw e; }
   finally { board.kill(); }
 }

@@ -67,6 +67,16 @@ jobs:
       - if: runner.os == 'Windows'
         run: pnpm exec electron-builder --win --publish never --config.extraMetadata.buildCommit=${{ github.sha }}
       - run: node tools/check-packaged-runtime.cjs release
+      - name: DSH Windows ACP and packaged model catalog (no API key)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm install --prefix "$env:USERPROFILE/.local/share/lolpingyourai-dsh" --save-exact @deepseek-ai/dsh@0.2.0-rc.2 --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tools/try-dsh.mjs --qianwen
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:LOLPINGAI_DSH_PATCH = (Resolve-Path examples/dsh-qianwen.patch.yml).Path
+          node tools/windows/check-app.mjs release/win-unpacked/LOLPingYourAI.exe --dsh-protocol
       - name: Packaged Windows native regression
         if: runner.os == 'Windows'
         shell: pwsh
