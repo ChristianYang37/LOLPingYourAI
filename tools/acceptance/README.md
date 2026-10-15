@@ -86,10 +86,18 @@ pnpm test:acceptance
 
 The tests use synthetic targets and local mock bridges; they do not operate your desktop or call a model. They cover path conventions, changed bridge credentials, failure/timeout exit codes, stale targets, context ownership, all three harnesses, ward outcomes, duplicate timestamps and output minimization. Full native input, clipboard, rendering, multi-display/DPI and signed-in model checks remain separate acceptance work.
 
-Local validation for this refactor: all 21 new tool tests and 40 existing focused core/Claude/service/desktop tests passed (61 total), plus TypeScript checking and JavaScript syntax checking. Windows CI is configured but has not yet been run for this branch; no Windows hardware or live model results are implied.
+Local validation for this refactor: all 21 new tool tests and 40 existing focused core/Claude/service/desktop tests passed (61 total), plus TypeScript checking and JavaScript syntax checking. Those initial protocol tests did not establish Windows hardware or live model behavior; subsequent integration is described below.
 
 See [the issue audit and repair plan](../../docs/claude-acceptance-audit.md) for the unresolved findings in #8 and #9.
 
 ### macOS native identity regression
 
 After `pnpm build:desktop`, run `pnpm exec electron tools/window-identity-test/main.cjs` and click **Run tests**. On macOS, if the helper reports a different permission state from Electron's System Settings entry, launch Electron through Launch Services with the absolute test script path (`open -n -a /path/to/Electron.app --args /absolute/path/to/tools/window-identity-test/main.cjs`). This preserves Electron's own authorization context; it does not grant permissions. The controller waits three seconds before starting. Avoid keyboard/mouse use while it runs. It creates a separate cold Electron process, checks actual textarea values and restoration, then exercises identical windows, four-corner resize/restore and rejected stale/modal/covered targets. Do not inspect the cold process with accessibility tools beforehand. Reports remain under ignored `.local/`.
+
+## Where these tools are used
+
+- `.github/workflows/ci.yml` runs `pnpm test:acceptance` on macOS/Node 22, Windows 2022/Node 22 and Windows 2025/Node 24. The tag-release workflow reuses that matrix. These are protocol/CLI and real local HTTP bridge tests with synthetic adapters and desktops, not model calls.
+- `tools/windows/live-codex.mjs` imports `Bridge`, `drive`, `redactor` and `statusSummary` from `core.mjs`. `tools/windows/check-app.mjs ... --live-codex` invokes it against the packaged app and an isolated Test Board. The Windows Codex observe/edit/restore run recorded in [docs/windows.md](../../docs/windows.md) uses this path. Authenticated model runs are opt-in and are not part of unattended CI.
+- `run.mjs` is the manual diagnostic entry point (`pnpm acceptance --help`). Its watch, ward, stale-context and timeline commands remain available for targeted investigations; their automated coverage is not evidence that every command has been used in a live model run.
+
+These are development and acceptance tools. They do not run on every user ping and are not shipped as part of the app runtime.

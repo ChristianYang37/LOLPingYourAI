@@ -229,6 +229,8 @@ The production app ships without an asar archive so its standalone ESM MCP serve
 
 ## Credits and license
 
+Thanks to [@csxq0605](https://github.com/csxq0605) for the Claude acceptance investigation and reusable test scripts in [PR #8](https://github.com/ChristianYang37/LOLPingYourAI/pull/8). The findings informed the fixes in [PR #11](https://github.com/ChristianYang37/LOLPingYourAI/pull/11), and the adapted scripts now live in [`tools/acceptance/`](tools/acceptance/).
+
 Thanks to [@fzh000543](https://github.com/fzh000543) for publishing an early [Windows portable build](https://github.com/fzh000543/LOLPingYourAI/releases/tag/v0.1.1-win.1) and contributing its packaging configuration and usage documentation in [PR #7](https://github.com/ChristianYang37/LOLPingYourAI/pull/7).
 
 Derived from [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1, which provides the input helper, radial wheels, overlays, settings and emote import. Copyright © 2026 Danrui Meng, MIT. Code in this repository is MIT ([LICENSE](LICENSE)).

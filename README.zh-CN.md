@@ -229,6 +229,8 @@ pnpm dist                                       # Windows x64 安装包（需在
 
 ## 致谢与许可
 
+感谢 [@csxq0605](https://github.com/csxq0605) 在 [PR #8](https://github.com/ChristianYang37/LOLPingYourAI/pull/8) 中提供 Claude 验收调查和可复用测试脚本。这些发现帮助我们完成了 [PR #11](https://github.com/ChristianYang37/LOLPingYourAI/pull/11) 的修复，整理后的脚本已纳入 [`tools/acceptance/`](tools/acceptance/)。
+
 感谢 [@fzh000543](https://github.com/fzh000543) 发布早期的 [Windows 便携版](https://github.com/fzh000543/LOLPingYourAI/releases/tag/v0.1.1-win.1)，并在 [PR #7](https://github.com/ChristianYang37/LOLPingYourAI/pull/7) 中提供便携版打包配置和使用文档。
 
 基于 [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1 派生，输入助手、轮盘、覆盖层、设置和表情导入都来自它。Copyright © 2026 Danrui Meng，MIT。本仓库代码采用 MIT 许可（[LICENSE](LICENSE)）。
