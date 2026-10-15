@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
-import { toolDefinitions } from './server.mjs';
+
 
 const endpoint = process.env.LOLPINGAI_ENDPOINT, token = process.env.LOLPINGAI_TOKEN;
 if (!endpoint || !token || !/^http:\/\/127\.0\.0\.1:\d+$/.test(endpoint)) throw new Error('Missing local bridge connection');
@@ -15,9 +15,9 @@ createInterface({ input: process.stdin }).on('line', async line => {
     let result;
     if (request.method === 'initialize') result = { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'lolpingyourai', version: '0.1.0' } };
     else if (request.method === 'ping') result = {};
-    else if (request.method === 'tools/list') result = { tools: toolDefinitions };
+    else if (request.method === 'tools/list') result = { tools: await call('tools', {}) };
     else if (request.method === 'tools/call') {
-      if (!toolDefinitions.some(t => t.name === request.params.name)) throw new Error('Unknown tool');
+      if (!(await call('tools', {})).some(t => t.name === request.params.name)) throw new Error('Unknown tool');
       try { const data = await call(request.params.name, request.params.arguments ?? {}); result = data.content ? data : { content: [{ type: 'text', text: JSON.stringify(data) }] }; }
       catch (error) { result = { isError: true, content: [{ type: 'text', text: error.message }] }; }
     } else throw new Error('Unsupported MCP method');

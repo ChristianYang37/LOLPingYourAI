@@ -1,10 +1,12 @@
-import { EMOTE_DURATION_S, emoteAnimUrl, type EmoteArt } from '../../shared/emotes';
+import { EMOTE_DURATION_S, emoteAnimUrl, emoteIconUrl, type EmoteArt } from '../../shared/emotes';
 import type { PingTag } from '../../shared/ipc';
 import { TAG_COLORS } from '../../shared/roomColors';
 
 export interface EmoteOptions {
   /** How wide the emote's art appears. */
   sizePx: number;
+  /** Custom lifetime uses the original still with a CSS envelope; baked WebP fades after 3 s. */
+  durationS?: number;
   /** A room member's name under the emote. */
   tag?: PingTag;
 }
@@ -52,7 +54,7 @@ async function fetchImage(url: string): Promise<Blob> {
   return res.blob();
 }
 
-/** The emotes on this overlay: at most one per owner ('self', 'preview' or a room member's id), each gone after EMOTE_DURATION_S. */
+/** The emotes on this overlay: at most one per owner ('self', 'preview' or a room member's id), each with its own lifetime. */
 export class EmoteStage {
   private readonly live = new Map<string, Live>();
   private readonly blobs = new Map<string, Promise<Blob>>();
@@ -66,16 +68,23 @@ export class EmoteStage {
     root.style.left = `${x}px`;
     root.style.top = `${y}px`;
     root.style.setProperty('--size', `${opts.sizePx}px`);
-    root.style.setProperty('--dur', `${EMOTE_DURATION_S}s`);
+    const durationS = opts.durationS ?? EMOTE_DURATION_S;
+    root.style.setProperty('--dur', `${durationS}s`);
     let complete!: () => void;
     const ended = new Promise<void>(resolve => { complete = resolve; });
     const live: Live = {
       root, url: null, gone: false, complete,
-      timer: setTimeout(() => this.end(owner, live), EMOTE_DURATION_S * 1000 + 150),
+      timer: setTimeout(() => this.end(owner, live), durationS * 1000 + 150),
     };
     this.live.set(owner, live);
 
-    if (art.kind === 'bundled') this.showBundled(live, art.slug);
+    if (art.kind === 'bundled' && opts.durationS !== undefined) {
+      // Keep the icon visible for the full configured time, without looping the baked exit animation.
+      const img = image();
+      img.addEventListener('error', () => { if (!live.gone) img.replaceWith(bubble()); }, { once: true });
+      img.src = emoteIconUrl(art.slug);
+      root.append(envelope(img));
+    } else if (art.kind === 'bundled') this.showBundled(live, art.slug);
     else if (art.kind === 'custom') {
       const img = image();
       img.addEventListener('error', () => img.replaceWith(bubble()), { once: true });

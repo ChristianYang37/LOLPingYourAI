@@ -53,6 +53,7 @@ beforeEach(() => {
   vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -145,4 +146,24 @@ describe('EmoteStage', () => {
     await flush();
     expect(layer.find('emote')).toHaveLength(0);
   });
+});
+
+
+it('keeps agent emotes visible until their extended lifetime ends, without replaying baked fades', async () => {
+  vi.useFakeTimers();
+  const layer = new FakeElement('div');
+  const fetchBlob = vi.fn();
+  const stage = new EmoteStage(layer as unknown as HTMLElement, fetchBlob);
+  const completed = vi.fn();
+  const ended = stage.spawn('agent', { kind: 'bundled', slug: 'unworthy_cn' }, 10, 20, { sizePx: 150, durationS: 6 }).then(completed);
+  const [fx] = layer.find('fx');
+  expect(fx.children[0].src).toBe('../emotes/unworthy_cn.png');
+  expect(fetchBlob).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(3150);
+  expect(layer.find('emote')).toHaveLength(1);
+  expect(completed).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(3000);
+  await ended;
+  expect(layer.find('emote')).toHaveLength(0);
+  expect(completed).toHaveBeenCalledOnce();
 });

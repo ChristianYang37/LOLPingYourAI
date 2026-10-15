@@ -1,4 +1,4 @@
-export const defaults = Object.freeze({ regionSize: 512, sessionHours: 2, wardHours: 0.5, harness: 'codex', banter: true, reasoningEffort: 0, dshThinking: true, modelSelections: {}, setupComplete: false });
+export const defaults = Object.freeze({ regionSize: 512, wardHours: 0.5, harness: 'codex', banter: true, reasoningEffort: 0, dshThinking: true, modelSelections: {}, setupComplete: false });
 
 export const signals = Object.freeze({
   missing: { label: 'Question', mode: 'observe', prompt: 'Explain or diagnose the highlighted region. Observe only; do not change anything.' },
@@ -20,7 +20,8 @@ export const signals = Object.freeze({
 
 export function validateConfig(value = {}) {
   const result = { ...defaults, ...value };
-  for (const [key, min, max] of [['regionSize', 128, 2048], ['sessionHours', 0.01, 168], ['wardHours', 0.001, 168]]) {
+  delete result.sessionHours; // Migrate old settings; session lifetime belongs to the harness.
+  for (const [key, min, max] of [['regionSize', 128, 2048], ['wardHours', 0.001, 168]]) {
     if (!Number.isFinite(result[key]) || result[key] < min || result[key] > max) throw new Error(`${key} must be between ${min} and ${max}`);
   }
   if (!Number.isInteger(result.regionSize)) throw new Error('regionSize must be an integer');

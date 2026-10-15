@@ -122,14 +122,19 @@ export async function poll(read, check, { timeoutMs = 60000, intervalMs = 500, n
 
 export async function drive(bridge, plan, { boardPath, allowActions = false, log = () => {}, loadBoard = readBoard, waitOptions = {} } = {}) {
   if (!['codex', 'claude', 'dsh'].includes(plan?.harness) || !Array.isArray(plan.steps) || !plan.steps.length) throw new Error('Plan requires a harness and nonempty steps');
-  const initial = await loadBoard(boardPath);
-  let previousId;
+  // Validate the whole plan before any ping; a malformed later step must not
+  // abandon an earlier turn that deliberately waits at working/received.
   for (const step of plan.steps) {
     if (!step || typeof step.signal !== 'string' || (step.message !== undefined && typeof step.message !== 'string') || (step.expectText !== undefined && typeof step.expectText !== 'string')) throw new Error('Invalid plan step');
     const after = step.after ?? 'done';
     if (!['done', 'working', 'waiting', 'stopped', 'received'].includes(after)) throw new Error('Unsupported wait condition');
     const timeoutMs = step.timeoutMs ?? 120000;
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 3600000) throw new Error('Invalid step timeout');
+  }
+  const initial = await loadBoard(boardPath);
+  let previousId;
+  for (const step of plan.steps) {
+    const after = step.after ?? 'done', timeoutMs = step.timeoutMs ?? 120000;
     const board = await loadBoard(boardPath, initial.instance), s = await bridge.call('status');
     if (s.config?.harness !== plan.harness) throw new Error('Select the plan harness in app settings before running');
     const mapping = s.config?.mappings?.[step.signal] ?? s.signals?.[step.signal];

@@ -10,7 +10,7 @@ const cwd = join(homedir(), 'Library/Application Support/LOLPingYourAI');
 
 // Stands in for the Agent SDK: reads one streamed user message per turn and answers it with a result.
 // `exiting` keeps the stream open after the input ends, as Claude Code does while it shuts down.
-function fakeSdk({ missingSessions = new Set(), models, exiting } = {}) {
+function fakeSdk({ missingSessions = new Set(), models, exiting, observedModel } = {}) {
   const calls = [];
   const query = ({ prompt, options }) => {
     const call = { options, prompts: [], interrupted: false }; calls.push(call);
@@ -21,7 +21,7 @@ function fakeSdk({ missingSessions = new Set(), models, exiting } = {}) {
       for (;;) {
         const next = await input.next(); if (next.done) { await exiting?.(); return; }
         call.prompts.push(next.value.message.content);
-        yield { type: 'system', subtype: 'init', session_id: session };
+        yield { type: 'system', subtype: 'init', session_id: session, model: observedModel };
         if (await Promise.race([interrupted, new Promise(resolve => setTimeout(() => resolve(false), 20))])) { yield { type: 'result', subtype: 'error_during_execution', is_error: true, session_id: session }; return; }
         yield { type: 'assistant', session_id: session, message: { role: 'assistant', content: [{ type: 'text', text: 'On it.' }] } };
         yield { type: 'result', subtype: 'success', is_error: false, session_id: session };
@@ -135,4 +135,11 @@ test('Claude holds even an eagerly consumed prompt until model settings are appl
   const escapedBeforeSettings = earlyPrompt;
   resolveModels([{ value: 'default', supportedEffortLevels: ['low'] }]); await done;
   assert.equal(escapedBeforeSettings, false, 'No prompt may leave before fast/model settings are checked');
+});
+
+test('Claude distinguishes catalog alias, observed model and SDK acknowledgment', async () => {
+  const sdk = fakeSdk({ models: [{ value: 'default', supportedEffortLevels: ['low'] }], observedModel: 'claude-concrete-model' });
+  const adapter = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
+  const done = completion(adapter); await adapter.send(await adapter.create(), 'Observe'); await done;
+  assert.equal(adapter.effectiveModel, 'default'); assert.equal(adapter.observedModel, 'claude-concrete-model'); assert.equal(adapter.settingsAcknowledged, true);
 });

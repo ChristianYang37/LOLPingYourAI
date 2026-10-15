@@ -14,18 +14,20 @@ export const toolDefinitions = [
   { name: 'submit_icon', description: 'Submit a generated SVG or PNG image as an icon candidate for user preview. Prefer an available image-generation tool; otherwise draw a standalone original SVG. Never fetch remote assets.', inputSchema: object({ name: str, svg: str, pngBase64: str }, ['name']) },
 ];
 
-export async function startBridge(service, store, extra = {}) {
+export async function startBridge(service, store, extra = {}, { only = null, persist = true } = {}) {
   const token = randomBytes(32).toString('hex');
   const handlers = {
-    status: () => service.status(), config: args => service.configure(args), ping: args => service.dispatch(args), stop: () => { service.generation++; return service.stop(); }, bind: args => service.bind(args), approve: args => service.approve(args),
+    status: () => service.status(), conversation: args => service.conversation.page(args), config: args => service.configure(args), ping: args => service.dispatch(args), message: args => service.message(args), stop: () => { service.generation++; return service.stop(); }, bind: args => service.bind(args), approve: args => service.approve(args),
     doctor: async () => ({ desktop: await service.desktop.doctor(), harnesses: await Promise.all(Object.entries(service.adapters).map(async ([name, a]) => { try { return { name, ...await a.capabilities() }; } catch (e) { return { name, error: e.message }; } })) }),
-    tools: () => toolDefinitions,
+    tools: () => toolDefinitions.filter(t => t.name !== 'submit_icon'),
     get_context: () => service.context ?? { message: 'No ping has been received' },
     screenshot: async args => { const capture = await service.screenshot(args.contextId); return { content: [{ type: 'image', mimeType: 'image/png', data: (await readFile(capture.imagePath)).toString('base64') }, { type: 'text', text: JSON.stringify({ target: capture.target, region: capture.region }) }] }; },
     desktop_action: args => service.action(args), reply_ping: args => service.reply(args), save_handoff: args => service.handoff(args),
-    ward: async args => { const c = service.checkContext(args.contextId); return args.cancel ? service.wards.cancel(c.target.id) : service.wards.add(c.target, service.config.wardHours, c.harness); },
+    ward: async args => { const c = service.checkContext(args.contextId); if (!c.target) throw new Error('Ping a window before registering a ward'); return args.cancel ? service.wards.cancel(c.target.id) : service.wards.add(c.target, service.config.wardHours, c.harness); },
     ...extra,
   };
+  if (only) { for (const name of Object.keys(handlers)) if (!only.includes(name) && name !== 'tools') delete handlers[name];
+    handlers.tools = () => toolDefinitions.filter(t => only.includes(t.name)); }
   const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     const supplied = Buffer.from((req.headers.authorization ?? '').replace(/^Bearer /, ''));
@@ -42,6 +44,6 @@ export async function startBridge(service, store, extra = {}) {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const endpoint = `http://127.0.0.1:${server.address().port}`;
-  await store.write('bridge', { endpoint, token, pid: process.pid });
+  if (persist) await store.write('bridge', { endpoint, token, pid: process.pid });
   return { endpoint, token, close: () => server.close() };
 }

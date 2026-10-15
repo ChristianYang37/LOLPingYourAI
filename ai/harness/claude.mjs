@@ -37,6 +37,7 @@ export class ClaudeAdapter extends EventEmitter {
     finally { release(); stream.close(); }
   }
   async send(id, prompt, image, settings = {}) {
+    this.observedModel = undefined; this.settingsAcknowledged = false;
     this.selection = { model: '', fastMode: false, ...this.selection, ...settings };
     this.effort = settings.reasoningEffort ?? this.effort ?? 0;
     if (this.active.has(id)) throw new Error('Claude turn is still active');
@@ -86,6 +87,7 @@ export class ClaudeAdapter extends EventEmitter {
         const supported = model.supportsEffort === false ? [] : model.supportedEffortLevels ?? ['low', 'medium', 'high'];
         this.effectiveEffort = chooseEffort(this.effort, supported);
         await record.stream.applyFlagSettings({ fastMode: this.selection.fastMode, ...(this.effectiveEffort ? { effortLevel: this.effectiveEffort } : {}) });
+        this.settingsAcknowledged = true;
       })().then(settingsReady, settingsFailed);
 
     };
@@ -97,7 +99,7 @@ export class ClaudeAdapter extends EventEmitter {
         for (;;) {
           try {
             for await (const message of record.stream) {
-              if (message.type === 'system' && message.subtype === 'init') this.model = message.model;
+              if (message.type === 'system' && message.subtype === 'init') this.observedModel = message.model;
               this.emit('event', { method: 'claude/message', params: { ...message, threadId: id } });
               if (message.session_id) this.known.add(message.session_id);
               if (message.type === 'result') { if (message.is_error) status = 'failed'; record.results++; record.wake?.(); }

@@ -1,6 +1,5 @@
 {
   "regionSize": 512,
-  "sessionHours": 2,
   "wardHours": 0.5,
   "harness": "codex",
   "banter": true,

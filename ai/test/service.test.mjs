@@ -21,13 +21,13 @@ async function fixture() {
   const service = new Teammate({ store, adapters: { codex: adapter, claude: new Adapter() }, desktop, now: () => now }); await service.init();
   return { service, adapter, data, time: n => { now = n; } };
 }
-test('successive pings resume, expiry creates a new session with a concise handoff', async () => {
+test('successive pings resume the native session even after long inactivity', async () => {
   const { service, adapter, time } = await fixture();
   const first = await service.dispatch({ signal: 'assist', point: { x: 60, y: 70 } });
   await service.handoff({ contextId: first.contextId, summary: 'Fix the button; inspected the layout.', goal: 'Fix button' });
   adapter.finish(); await service.dispatch({ signal: 'missing', point: { x: 60, y: 70 } }); assert.equal(adapter.next, 1);
   adapter.finish(); time(7201000); await service.dispatch({ signal: 'assist', point: { x: 60, y: 70 } });
-  assert.equal(adapter.next, 2); assert.match(adapter.sent.at(-1).prompt, /Fix the button/);
+  assert.equal(adapter.next, 1); assert.match(adapter.sent.at(-1).prompt, /Fix the button/);
 });
 test('remote/agent replies never dispatch; duplicate input runs once', async () => {
   const { service, adapter } = await fixture();
@@ -166,4 +166,118 @@ test('ACP permissions select only an offered one-time option and retain unsuppor
   await service.approve({ harness: 'codex', id: 8, allow: true });
   assert.deepEqual(answers[1].result, { outcome: { outcome: 'selected', optionId: 'once' } });
   assert.equal(service.approvals.length, 0);
+});
+
+test('direct text starts without desktop access, streams a reply, and continues the same session', async () => {
+  const { service, adapter } = await fixture();
+  service.desktop.capture = service.desktop.reply = service.desktop.action = async () => { throw new Error('Desktop must not be touched'); };
+  const first = await service.message({ text: 'Hello from chat' });
+  assert.equal(service.context.mode, 'chat'); assert.equal(service.context.target, undefined);
+  assert.equal(service.gate.allowed, false);
+  await assert.rejects(service.screenshot(first.contextId), /Ping a window/);
+  await assert.rejects(service.action({ contextId: first.contextId, action: 'click' }), /Ping a window/);
+  adapter.emit('event', { method: 'item/agentMessage/delta', params: { threadId: first.session, delta: 'Hello back' } });
+  assert.equal(service.task.text, 'Hello back');
+  adapter.finish(); await new Promise(r => setImmediate(r));
+  assert.equal(service.task.phase, 'done');
+  await service.message({ contextId: first.contextId, text: 'Continue' });
+  assert.equal(adapter.next, 1); assert.equal(adapter.sent.length, 2);
+});
+
+test('text can precede a desktop ping; only the ping captures and enables actions', async () => {
+  const { service, adapter } = await fixture(); let captures = 0;
+  const capture = service.desktop.capture; service.desktop.capture = async (...args) => { captures++; return capture(...args); };
+  await service.message({ text: 'Help me with this project' }); assert.equal(captures, 0);
+  adapter.finish(); await service.dispatch({ signal: 'assist', point: { x: 1, y: 2 } });
+  assert.equal(captures, 1); assert.equal(adapter.next, 1); assert.equal(service.gate.allowed, true);
+});
+
+test('text queues behind another harness without locating a window, and retreat clears it', async () => {
+  const { service } = await fixture();
+  const first = await service.message({ text: 'Start' });
+  await service.configure({ harness: 'claude' });
+  service.desktop.locate = service.desktop.capture = async () => { throw new Error('No window'); };
+  assert.equal((await service.message({ contextId: first.contextId, text: 'Use Claude' })).queued, true);
+  assert.equal(service.pendingPings.length, 1);
+  await service.stop(); assert.equal(service.pendingPings.length, 0); assert.equal(service.adapters.claude.sent.length, 0);
+});
+
+test('direct text retains its session and validates empty/stale submissions', async () => {
+  const { service, adapter, time } = await fixture();
+  await assert.rejects(service.message({ text: '  ' }), /characters/);
+  const first = await service.message({ text: 'Start' }); adapter.finish();
+  time(7201000); await service.message({ contextId: first.contextId, text: 'After a long idle' });
+  assert.equal(adapter.next, 1);
+  await assert.rejects(service.message({ contextId: first.contextId, text: 'Old context' }), /Stale/);
+});
+
+test('conversation persists user text, streamed replies, pings and agent reactions across restart', async () => {
+  const { service, adapter, data } = await fixture();
+  const chat = await service.message({ text: 'Remember this request' });
+  adapter.emit('event', { method: 'item/agentMessage/delta', params: { threadId: chat.session, delta: 'A complete reply' } });
+  adapter.finish();
+  await service.dispatch({ id: 'visible-ping', signal: 'missing' });
+  await service.reply({ contextId: 'visible-ping', signal: 'onmyway', caption: 'Here' });
+  await service.dispatch({ signal: 'vision' });
+  await service.dispatch({ signal: 'cleared' });
+  await service.dispatch({ signal: 'retreat' });
+  await service.conversation.flush();
+  const records = data['ai-conversation'];
+  assert.equal(records[0].text, 'Remember this request');
+  assert.equal(records[1].text, 'A complete reply');
+  assert.equal(records[1].phase, 'done');
+  assert.ok(records.some(r => r.role === 'user' && r.signal === 'missing'));
+  assert.ok(records.some(r => r.role === 'agent' && r.signal === 'onmyway' && r.text === 'Here'));
+  for (const signal of ['vision', 'cleared', 'retreat']) assert.ok(records.some(r => r.role === 'user' && r.signal === signal));
+  assert.ok(!JSON.stringify(records).includes('/test.png'));
+  const restarted = new Teammate({ store: service.store, desktop: service.desktop, adapters: { codex: new Adapter() } });
+  await restarted.init();
+  assert.deepEqual(restarted.status().conversation.entries, records);
+  await restarted.message({ text: 'After restart' });
+  assert.equal(restarted.adapters.codex.next, 0);
+  assert.equal(restarted.adapters.codex.sent[0].id, chat.session);
+  service.close(); restarted.close();
+});
+
+test('legacy expired sessions are resumed, not silently replaced', async () => {
+  const { service, adapter, time } = await fixture();
+  const first = await service.message({ text: 'Start' }); adapter.finish();
+  service.sessions.codex.expired = true; await service.saveSessions();
+  await service.configure({ sessionHours: .01 });
+  time(365 * 24 * 3600000);
+  const restarted = new Teammate({ store: service.store, desktop: service.desktop, adapters: { codex: new Adapter() } });
+  await restarted.init(); await restarted.message({ text: 'Continue' });
+  assert.equal(restarted.adapters.codex.next, 0);
+  assert.equal(restarted.adapters.codex.sent[0].id, first.session);
+  assert.equal('sessionHours' in restarted.config, false);
+  service.close(); restarted.close();
+});
+
+test('busy follow-up and duplicate receipts are logged once without dropping earlier reply text', async () => {
+  const { service, adapter } = await fixture();
+  const first = await service.message({ text: 'Start' });
+  adapter.emit('event', { method: 'item/agentMessage/delta', params: { threadId: first.session, delta: 'Working' } });
+  await service.message({ contextId: first.contextId, text: 'Also consider this' });
+  await service.dispatch({ id: first.contextId, signal: 'missing' });
+  const rows = service.status().conversation.entries;
+  assert.equal(rows.filter(r => r.role === 'user').length, 2);
+  assert.equal(rows.find(r => r.role === 'agent').text, 'Working');
+  assert.equal(adapter.sent.at(-1).steer, true);
+  service.close();
+});
+
+test('unconfirmed cancellation never reports stopped or reopens the action gate', async () => {
+  const { service, adapter } = await fixture(); await service.dispatch({ signal: 'assist' });
+  adapter.cancel = async () => { throw new Error('Harness has not confirmed cancellation'); };
+  await assert.rejects(service.stop(), /not confirmed/);
+  assert.equal(service.task.phase, 'stopping'); assert.equal(service.gate.allowed, false);
+  await assert.rejects(service.action({ contextId: service.context.id, action: 'type', text: 'late' }), /cancelled/);
+});
+
+test('Finish setup and signal mappings survive service restart', async () => {
+  const { service } = await fixture();
+  const mappings = { missing: { label: 'Explain', mode: 'observe', prompt: 'Explain only visible text.' } };
+  await service.configure({ setupComplete: true, mappings });
+  const restarted = new Teammate({ store: service.store, adapters: { codex: new Adapter() }, desktop: service.desktop }); await restarted.init();
+  assert.equal(restarted.config.setupComplete, true); assert.deepEqual(restarted.config.mappings, mappings);
 });

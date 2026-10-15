@@ -1,3 +1,5 @@
+import { ChatHome } from './components/ChatHome';
+import './workspace.css';
 import { TeammatePanel } from './components/TeammatePanel';
 import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
@@ -90,7 +92,8 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   }, [t]);
   const mainRef = useRef<HTMLElement>(null);
   const updateState = useUpdateState() ?? null; // no update checker in this build, or not known yet: no update controls
-  const [active, setActive] = useState(SECTIONS[0].id);
+  const [active, setActive] = useState('teammate');
+  const [view, setView] = useState<'chat' | 'settings'>(() => location.hash && location.hash !== '#teammate' && location.hash !== '#chat' ? 'settings' : 'chat');
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
@@ -101,46 +104,39 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   }));
 
   useEffect(() => {
-    const show = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-    const initial = location.hash.slice(1);
-    if (initial) requestAnimationFrame(() => show(initial));
+    const show = (id: string) => {
+      if (id === 'chat' || id === 'teammate') setView('chat');
+      else { setView('settings'); setActive(SECTIONS.some(s => s.id === id) ? id : 'teammate'); }
+    };
+    if (location.hash) show(location.hash.slice(1));
     return api.onShowSection(show);
   }, []);
-
-  const onScroll = () => {
-    const main = mainRef.current;
-    if (!main) return;
-    let current = SECTIONS[0].id;
-    for (const sec of SECTIONS) {
-      const el = document.getElementById(sec.id);
-      if (el && el.offsetTop - main.offsetTop - 40 <= main.scrollTop) current = sec.id;
-    }
-    setActive(current);
-  };
+  useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [active]);
+  const zh = t.lang.startsWith('zh');
+  const openSettings = () => { setActive('teammate'); setView('settings'); };
 
   return (
-    <div className="app">
-      <div className="titlebar">
-        <img src={appLogo} alt="" />
-        LOLPingYourAI
-      </div>
-      <nav className="side">
-        <div className="brand">
-          <img src={appLogo} alt="" />
-          <div>
-            <b>LOLPingYourAI</b>
-            <span className="desc">{t.tagline}</span>
-          </div>
-        </div>
+    <div className="workspace">
+      <header className="workspace-bar">
+        <div className="workspace-brand"><img src={appLogo} alt="" /><strong>LOLPingYourAI</strong><span>{zh ? '你的桌面队友' : 'Your desktop teammate'}</span></div>
+        <button className="workspace-switch" onClick={() => setView(view === 'chat' ? 'settings' : 'chat')} aria-label={view === 'chat' ? (zh ? '打开设置' : 'Open settings') : (zh ? '返回聊天' : 'Back to chat')}>
+          {view === 'chat' ? <Settings24Regular /> : <PeopleCommunity24Regular />}{view === 'chat' ? (zh ? '设置' : 'Settings') : (zh ? '返回聊天' : 'Back to chat')}
+        </button>
+      </header>
+      <div className="chat-view" hidden={view !== 'chat'}><ChatHome settings={s} status={status} openSettings={openSettings} /></div>
+      <div className="settings-layout" hidden={view !== 'settings'}>
+      <nav className="settings-side" aria-label={zh ? '设置分类' : 'Settings categories'}>
+        <p>{zh ? '设置' : 'SETTINGS'}</p>
         {SECTIONS.map((sec) => (
-          <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} onClick={() => document.getElementById(sec.id)?.scrollIntoView({ behavior: 'smooth' })}>
+          <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} aria-current={active === sec.id ? 'page' : undefined} onClick={() => setActive(sec.id)}>
             {sec.icon}
             {sec.label(t)}
           </button>
         ))}
       </nav>
-      <main className="content" ref={mainRef} onScroll={onScroll}>
-        <h1 className="pageTitle">{t.pageTitle}</h1>
+      <main className="settings-content" ref={mainRef}>
+        <h1>{SECTIONS.find(sec => sec.id === active)?.label(t)}</h1>
+        <section hidden={active !== 'trigger'}>
         {status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
         <StatusCard settings={s} status={status} />
 
@@ -166,6 +162,8 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
         )}
 
+        </section>
+        <section hidden={active !== 'toggle'}>
         <div className="section" id="toggle">{t.navToggle}</div>
         <SettingRow icon={<Keyboard24Regular />} title={t.toggleShortcut} description={t.toggleShortcutDesc}>
           <KeyCapture
@@ -181,28 +179,40 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<Power24Regular />} title={t.startEnabled} description={t.startEnabledDesc}
           checked={s.enabledOnStart} onChange={(v) => void update({ enabledOnStart: v })} />
 
+        </section>
+        <section hidden={active !== 'pings'}>
         <div className="section" id="pings">{t.navPings}</div>
         <SliderRow limit="pingSizePx" icon={<ResizeLarge24Regular />} title={t.pingSize} value={s.pingSizePx}
           format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ pingSizePx: v })} />
         <SliderRow limit="pingDurationS" icon={<Timer24Regular />} title={t.pingDuration} description={t.pingDurationDesc}
           value={s.pingDurationS} format={(v) => `${v.toFixed(1)} s`} onChange={(v) => void update({ pingDurationS: v })} />
+        <SliderRow limit="agentPingDurationS" icon={<Timer24Regular />} title={t.agentPingDuration} description={t.agentPingDurationDesc}
+          value={s.agentPingDurationS} format={(v) => `${v.toFixed(1)} s`} onChange={(v) => void update({ agentPingDurationS: v })} />
         <SliderRow limit="volume" icon={<Speaker224Regular />} title={t.volume} value={s.volume}
           format={(v) => `${v}`} onChange={(v) => void update({ volume: v })} dim={s.muted} />
         <SwitchRow icon={<SpeakerMute24Regular />} title={t.mute} checked={s.muted} onChange={(v) => void update({ muted: v })} />
         <SwitchRow icon={<MusicNote224Regular />} title={t.tickSound} description={t.tickSoundDesc}
           checked={s.tickSound} onChange={(v) => void update({ tickSound: v })} />
 
+        </section>
+        <section hidden={active !== 'wheel'}>
         <div className="section" id="wheel">{t.navWheel}</div>
         <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool}
           defaults={{ wheel: DEFAULT_WHEEL, center: DEFAULT_CLICK_PING }}
           labels={{ title: t.wheelTitle, desc: t.wheelDesc(trigger), poolTitle: t.allPings, poolDesc: t.allPingsDesc }}
           onChange={(patch) => void update(pingPatch(patch))} onPreview={(id) => void api.previewPing(id)} />
 
+        </section>
+        <section hidden={active !== 'emotes'}>
         <div className="section" id="emotes">{t.navEmotes}</div>
         <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
 
-        <TeammatePanel />
+        </section>
+        <section hidden={active !== 'teammate'}>
+        {view === 'settings' && active === 'teammate' && <TeammatePanel />}
 
+        </section>
+        <section hidden={active !== 'app'}>
         <div className="section" id="app">{t.navApp}</div>
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
           checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
@@ -225,7 +235,9 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             checked={s.autoUpdateCheck} onChange={(v) => void update({ autoUpdateCheck: v })} />
         ) : null}
         <AboutSection icon={<Info24Regular />} update={updateState} />
+        </section>
       </main>
+      </div>
     </div>
   );
 }

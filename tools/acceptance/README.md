@@ -89,3 +89,7 @@ The tests use synthetic targets and local mock bridges; they do not operate your
 Local validation for this refactor: all 21 new tool tests and 40 existing focused core/Claude/service/desktop tests passed (61 total), plus TypeScript checking and JavaScript syntax checking. Windows CI is configured but has not yet been run for this branch; no Windows hardware or live model results are implied.
 
 See [the issue audit and repair plan](../../docs/claude-acceptance-audit.md) for the unresolved findings in #8 and #9.
+
+### macOS native identity regression
+
+After `pnpm build:desktop`, run `pnpm exec electron tools/window-identity-test/main.cjs` and click **Run tests**. On macOS, if the helper reports a different permission state from Electron's System Settings entry, launch Electron through Launch Services with the absolute test script path (`open -n -a /path/to/Electron.app --args /absolute/path/to/tools/window-identity-test/main.cjs`). This preserves Electron's own authorization context; it does not grant permissions. The controller waits three seconds before starting. Avoid keyboard/mouse use while it runs. It creates a separate cold Electron process, checks actual textarea values and restoration, then exercises identical windows, four-corner resize/restore and rejected stale/modal/covered targets. Do not inspect the cold process with accessibility tools beforehand. Reports remain under ignored `.local/`.

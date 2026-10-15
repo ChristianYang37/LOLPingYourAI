@@ -11,6 +11,7 @@ export class CompanionWindow {
   constructor(private status: () => any) {}
   async update() {
     if (!this.status().task) return;
+    if (this.status().task.signal === 'chat') { this.win?.hide(); return; }
     if (!this.win || this.win.isDestroyed()) {
       const win = this.win = new BrowserWindow({ width: 360, height: 280, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#101d27', webPreferences: { preload: preloadPath('companion'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

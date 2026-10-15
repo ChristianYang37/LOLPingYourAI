@@ -64,16 +64,16 @@ function applySettings(s: OverlaySettings): void {
 }
 applySettings(settings);
 
-async function ping(def: PingDef, x: number, y: number, tag?: PingTag): Promise<void> {
+async function ping(def: PingDef, x: number, y: number, tag?: PingTag, durationS = settings.pingDurationS): Promise<void> {
   await Promise.all([
-    spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS: settings.pingDurationS, tag }),
+    spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS, tag }),
     sounds.play(def.sound, volume()),
   ]);
 }
 
-async function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag): Promise<void> {
+async function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag, durationS?: number): Promise<void> {
   await Promise.all([
-    stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, tag }),
+    stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, durationS, tag }),
     art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound && settings.emoteSound ? sounds.play(`emote:${art.slug}`, volume()) : Promise.resolve(),
   ]);
 }
@@ -104,8 +104,8 @@ window.overlay.on('agent:ping', async (p) => {
   await assetsReady;
   const reactions: Partial<Record<string, string>> = { bait: 'unworthy_cn', like: 'super_approved', celebrate: 'gg_heart' };
   const slug = reactions[p.id];
-  if (slug) await emote('agent', { kind: 'bundled', slug }, p.x, p.y, p.tag);
-  else await ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag);
+  if (slug) await emote('agent', { kind: 'bundled', slug }, p.x, p.y, p.tag, settings.agentPingDurationS);
+  else await ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag, settings.agentPingDurationS);
   window.overlay.agentPingEnded(p.requestId);
 });
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
