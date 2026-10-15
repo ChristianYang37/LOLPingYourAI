@@ -107,7 +107,7 @@ async function start(): Promise<void> {
     return enabled ? 'on' : 'off';
   };
   const tray = new AppTray(
-    assetPath('textures', 'generic_ping.png'),
+    IS_MAC ? assetPath('textures', 'generic_ping.png') : buildResourcePath('icon.png'),
     {
       openSettings: () => openSettingsWindow(),
       teammate: () => openSettingsWindow('teammate'),

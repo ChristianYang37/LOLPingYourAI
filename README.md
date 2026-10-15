@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="build/icon.png" width="104" alt="LOLPingYourAI icon">
+<img src="build/icon.png" width="200" alt="LOLPingYourAI icon">
 
 # LOLPingYourAI
 

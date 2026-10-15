@@ -1,6 +1,6 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
 import { SETTINGS_CH } from '../shared/settingsChannels';
-import { assetPath, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
+import { buildResourcePath, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
 
 let win: BrowserWindow | null = null;
 const goneListeners: Array<() => void> = [];
@@ -86,7 +86,7 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     minWidth: 720,
     minHeight: 520,
     title: 'LOLPingYourAI',
-    icon: nativeImage.createFromPath(assetPath('textures', 'generic_ping.png')),
+    icon: nativeImage.createFromPath(buildResourcePath('icon.png')),
     show: false,
     ...chromeOptions(),
     webPreferences: { preload: preloadPath('settings'), spellcheck: false },

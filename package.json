@@ -75,6 +75,10 @@
         {
           "from": "native/desktop/build/desktop-helper.exe",
           "to": "desktop-helper.exe"
+        },
+        {
+          "from": "build/icon.png",
+          "to": "icon.png"
         }
       ]
     },
@@ -107,7 +111,8 @@
           "from": "build",
           "to": ".",
           "filter": [
-            "tray*Template*.png"
+            "tray*Template*.png",
+            "icon.png"
           ]
         },
         {

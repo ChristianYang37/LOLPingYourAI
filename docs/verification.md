@@ -103,3 +103,10 @@ At the time of the first local verification, no GitHub repository had been creat
 - Live Electron suite: 10/10 cases. Chrome: 30 alternating edits between identical overlapping windows. Safari: 10 alternating edits on the final helper. Both browsers passed stale/fresh movement, modal-input rejection with no deferred text after dismissal, original-text restoration and closed-window rejection. Some attempted runs safely stopped on focus changes; no zero-refusal or universal app-compatibility claim is made.
 - Independent PR checkout: 34 AI tests; 709 Vitest passes and one skip (seven helper cases passed after their missing build prerequisite was compiled); typecheck, native builds, production build, Apple Silicon DMG packaging and strict deep signature verification passed. No new SHA-256 check. The installed app was not replaced.
 - See [window identity design and test evidence](window-identity.md) for reproduction, discovered browser issues, private-SPI dependency, conservative refusals and untested boundaries.
+
+
+## Owner-supplied logo — 2026-10-15
+
+- Preserved the supplied 1254×1254 PNG as `build/icon.png`; both language READMEs display it. Generated Windows ICO frames at 16, 24, 32, 48, 64, 128 and 256 pixels and decoded every frame successfully.
+- Packaged the same logo for the settings/window icon on both platforms; Windows tray branding uses it too. macOS retains the existing monochrome menu-bar status glyphs. Updated artwork attribution.
+- Typecheck, 26 existing window/tray tests and production build passed after the change. Rebuilt the Apple Silicon DMG, passed strict deep signature verification, and visually inspected the icon extracted from the final app's ICNS. The installed app was not replaced.
