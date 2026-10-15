@@ -14,7 +14,7 @@ The macOS + Codex desktop-control loop was exercised with a real model and an is
 | Combination | Implementation | Evidence |
 | --- | --- | --- |
 | macOS arm64 + Codex | App Server, project MCP, Swift/CG/AX helper | Real screenshot, model interpretation, reverse-ping calls, text editing, interruption, restoration and window resize |
-| macOS + Claude | Agent SDK, project MCP, same helper | SDK import verified; no authenticated Claude run |
+| macOS + Claude | Agent SDK, project MCP, same helper | Signed-in run of acceptance steps 1–5 on the packaged app (2026-10-15, below) |
 | Windows + Codex | Same App Server adapter; Win32 helper and DPI conversions | Source and CI configuration only; Windows helper not compiled or run here |
 | Windows + Claude | Agent SDK + Win32 project backend | Source only; no Windows/Claude run |
 
@@ -95,3 +95,26 @@ At the time of the first local verification, no GitHub repository had been creat
 - CLI: `help`, command validation before contacting the app, and the "start the app" hint only when the app is actually unreachable.
 - Typecheck passed; Vitest 709 passed / 1 skipped; AI bridge tests 31 passed (9 new). New tests drive a stand-in App Server over real stdio JSON-RPC (the concurrency and crash tests fail against the previous adapter), a stand-in Agent SDK that consumes streamed input per turn, the tool policy, and the CLI against a real local bridge. Real Electron asset and five-reply queue checks passed again. C++ helper: 411 passed.
 - Not verified live: no Claude credentials were available on the test machine (the SDK reported "Not logged in"), and Codex CLI was not installed there, so no model-driven turn was repeated for this revision. Earlier live Codex evidence above still describes the desktop loop.
+
+
+## Signed-in Claude run — 2026-10-15
+
+First authenticated Claude run of the [acceptance script](acceptance.md), steps 1–5, on the packaged Apple Silicon app with the Test Board. Apple Silicon, macOS 27.0.1, Node 26.10, Electron 44.5.1, Agent SDK 0.3.300 with its bundled Claude Code 2.1.300, model `claude-opus-5-5` (the SDK default), claude.ai subscription login. The app was started with a clean environment. Scripted pings went through the local bridge (the CLI path) at a point over the note, and a person also pinged by hand with the wheel; every action and reply came from the model.
+
+- Every turn's init message reported the same tools: `Read`, `Grep`, `Glob` and the seven project MCP tools, with `lolpingyourai` as the only MCP server.
+- Question: `get_context`, an `onmyway` acknowledgement (seen on screen), a screenshot and an `allin` reply captioned "Test board, unchanged". The model quoted `Ready for a ping.` exactly and edited nothing. 22 s.
+- Assist with “Replace the note with Ping received. Only edit this test board.”: click on the note, `cmd+a`, type `Ping received`, a confirming screenshot, a handoff and a completion reply. The Test Board recorded `Ping received`. 31 s.
+- Danger with “Stop that approach; restore Ready for a ping.” right after the first click of a new assist turn: the in-flight action was refused, the SDK ended the old turn as interrupted, and a new turn inspected a fresh screenshot and restored `Ready for a ping.` with the board's Reset note button. The superseded context was later refused with `Stale ping context`.
+- Retreat right after the first click of another assist turn: the bridge returned `stopped: true` 0.66 s later, after the SDK's interrupted result. "Stopped. Control returned to you." appeared, no later turn or action followed, the note was unchanged and the superseded context was refused.
+- On my way maximized the board to the work area (1470×923 at 0,33) without changing zoom or text. Asked to restore, the model returned it to exactly 680×520 at (100,100), confirmed with the desktop helper.
+- The session resumed across pings. A CLI `bind` handoff started a fresh session lazily on the next ping.
+- Physical wheel pings, made by hand with ⌥ Option + drag: Question, Enemy Vision and On my way on the Test Board, and Question over another application's window. Each started a turn with the expected signal and mode and got reverse pings; On my way maximized the board.
+
+Problems found:
+
+1. With a claude.ai login, the teammate was also offered the account's claude.ai connectors (for example document create and delete tools), although the README says only `Read`/`Grep`/`Glob` and the desktop tools are exposed. The `PreToolUse` hook refused them, but the model could see them. `strictMcpConfig: true` now loads only the project MCP server; a test covers it.
+2. SDK `^0.2` bundled Claude Code 2.1.141, whose default model is Opus 4.7. The dependency is now `^0.3.300` (Claude Code 2.1.300, default Opus 5.5). Typecheck, Vitest (709 passed, 1 skipped) and the AI bridge tests (31 passed) pass with it.
+3. A model without image input fails every ping with a generic "issue with the selected model" error, because each ping carries a screenshot. This happened with a third-party Anthropic-compatible endpoint set in the user's Claude settings; the teammate needs an image-capable model.
+4. An app started from a shell inherits that shell's environment, including `ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL` and credentials, and the teammate follows them. Start it from Finder, or with a clean environment, when testing.
+
+Not covered: the rest of steps 6–8 (ward, emote import and generation, wheel cancel, the emote wheel, click-through and sound) and Windows. Automation could not hold Option across a drag, because its synthetic mouse events carry their own modifier flags and the hook checks every event, so the wheel pings above were made by hand.
