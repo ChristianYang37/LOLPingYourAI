@@ -9,11 +9,18 @@ importers:
   .:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.300
+        specifier: 0.3.300
         version: 0.3.300(@anthropic-ai/sdk@0.93.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(zod@4.6.5)
       sharp:
         specifier: ^0.34.0
         version: 0.34.5
+    optionalDependencies:
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64':
+        specifier: 0.3.300
+        version: 0.3.300
+      '@anthropic-ai/claude-agent-sdk-win32-x64':
+        specifier: 0.3.300
+        version: 0.3.300
     devDependencies:
       '@fluentui/react-components':
         specifier: 9.74.9

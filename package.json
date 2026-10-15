@@ -135,7 +135,11 @@
     "lolpingai": "ai/cli.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.300",
+    "@anthropic-ai/claude-agent-sdk": "0.3.300",
     "sharp": "^0.34.0"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/claude-agent-sdk-darwin-arm64": "0.3.300",
+    "@anthropic-ai/claude-agent-sdk-win32-x64": "0.3.300"
   }
 }
