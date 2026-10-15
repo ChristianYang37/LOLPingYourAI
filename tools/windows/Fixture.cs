@@ -13,7 +13,7 @@ class Fixture {
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
     static JavaScriptSerializer json=new JavaScriptSerializer();
     static Form[] windows=new Form[2]; static TextBox[] notes=new TextBox[2];
-    static int stealAfter, delayNext; static Form cover;
+    static int stealAfter, delayNext; static bool ctrlReleased; static Form cover;
     class Note : TextBox {
         protected override void WndProc(ref Message m) {
             if(m.Msg==0x0102 && delayNext>0) {
@@ -21,6 +21,7 @@ class Fixture {
                 Print(new{input=0,delayStarted=true,length=0}); Thread.Sleep(delay);
             }
             base.WndProc(ref m);
+            if(m.Msg==0x0101 && m.WParam.ToInt32()==17) ctrlReleased=true;
         }
     }
     static void Print(object value) { Console.WriteLine(json.Serialize(value)); Console.Out.Flush(); }
@@ -33,7 +34,7 @@ class Fixture {
         t.TextChanged+=(s,e)=> { Print(new{input=i,length=t.Text.Length}); if(i==0 && stealAfter>0 && t.Text.Length>=stealAfter) { stealAfter=0; windows[1].Activate(); notes[1].Focus(); SetForegroundWindow(windows[1].Handle); } };
         f.Show();
     }
-    static object State() { return new {pid=System.Diagnostics.Process.GetCurrentProcess().Id,ids=new[]{windows[0].Handle.ToInt64().ToString(),windows[1].Handle.ToInt64().ToString()},values=new[]{notes[0].Text,notes[1].Text},held=new[]{17,18,16,1,2}.SelectHeld()}; }
+    static object State() { return new {pid=System.Diagnostics.Process.GetCurrentProcess().Id,ids=new[]{windows[0].Handle.ToInt64().ToString(),windows[1].Handle.ToInt64().ToString()},values=new[]{notes[0].Text,notes[1].Text},selectedLength=notes[0].SelectionLength,ctrlReleased,held=new[]{17,18,16,1,2}.SelectHeld()}; }
     [STAThread] static void Main() {
         Console.InputEncoding=new System.Text.UTF8Encoding(false); Console.OutputEncoding=new System.Text.UTF8Encoding(false);
         SetProcessDpiAwarenessContext(new IntPtr(-4)); Make(0); Make(1); Print(new{ready=State()});
@@ -49,6 +50,7 @@ class Fixture {
                         if(op=="move") windows[i].Left+=40;
                         if(op=="steal") stealAfter=10;
                         if(op=="delay") delayNext=2500;
+                        if(op=="keyAck") ctrlReleased=false;
                         if(op=="recreate") { windows[0].Close(); Make(0); }
                         if(op=="cover") { cover=new Form{Text="LOLPing fixture obstruction",Bounds=windows[0].Bounds,StartPosition=FormStartPosition.Manual,TopMost=true,ShowInTaskbar=false}; cover.Show(); }
                         if(op=="uncover") { cover.Close(); cover=null; }

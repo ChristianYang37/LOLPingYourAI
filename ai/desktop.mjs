@@ -5,9 +5,10 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { squareRegion, windowAnchor, anchoredPoint } from './geometry.mjs';
+const windowKey = target => `${target.pid}:${target.processStartedAt ?? ''}:${target.id}:${target.windowToken ?? ''}`;
 
 export class Desktop {
-  constructor({ electron, helper, dataDir, overlays, pingIds }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds }); this.savedBounds = new Map(); this.captureTail = Promise.resolve(); }
+  constructor({ electron, helper, dataDir, overlays, pingIds }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds }); this.savedBounds = new Map(); this.keyVerification = new Map(); this.captureTail = Promise.resolve(); }
   native(op, args = {}, signal) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) return reject(new Error('Desktop action cancelled'));
@@ -53,6 +54,8 @@ export class Desktop {
     let target, point;
     if (tracked) { const w = await this.resolve(pointOrTarget); target = { ...w, relative: pointOrTarget.relative }; point = anchoredPoint(target, w.bounds); }
     else { point = pointOrTarget; const w = this.normalizeWindow(await this.native('target', this.toNativePoint(point))); target = windowAnchor(w, point); }
+    const verification = this.keyVerification.get(windowKey(target));
+    const canVerify = verification?.settled;
     const display = screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) });
     const region = squareRegion(point, size, { ...display.bounds, scaleFactor: display.scaleFactor });
     const png = await this.overlays.captureWithoutOverlays(async () => {
@@ -84,6 +87,7 @@ export class Desktop {
     // Keep a bounded local diagnostic history; never delete the just-captured image.
     const old = (await readdir(dir)).filter(f => /^ping-\d+\.png$/.test(f)).sort().slice(0, -100);
     await Promise.all(old.map(f => unlink(join(dir, f)).catch(() => {})));
+    if (canVerify && this.keyVerification.get(windowKey(target)) === verification) this.keyVerification.delete(windowKey(target));
     return { target, region, imagePath };
   }
   async reply({ signal, target, at, caption }) {
@@ -100,8 +104,18 @@ export class Desktop {
       if (args.x < target.bounds.x || args.x >= target.bounds.x + target.bounds.width || args.y < target.bounds.y || args.y >= target.bounds.y + target.bounds.height) throw new Error('Point is outside the target window');
       return native(args.action, { ...identity, expectedBounds: process.platform === 'win32' ? target.nativeBounds ?? this.electron.screen.dipToScreenRect(null, target.bounds) : target.bounds, ...this.toNativePoint({ x: args.x, y: args.y }), button: args.button, delta: Math.max(-2000, Math.min(2000, Number(args.delta) || 0)) });
     }
-    if (args.action === 'type') { if (typeof args.text !== 'string' || args.text.length > 10000) throw new Error('Invalid text'); return native('type', { ...identity, text: args.text }); }
-    if (args.action === 'key') { if (typeof args.key !== 'string' || args.key.length > 50) throw new Error('Invalid key'); return native('key', { ...identity, key: args.key }); }
+    if (args.action === 'type') {
+      if (typeof args.text !== 'string' || args.text.length > 10000) throw new Error('Invalid text');
+      if (this.keyVerification.has(windowKey(target))) throw new Error('Keyboard events were queued. Take a fresh screenshot and verify the intended selection or state before typing.');
+      return native('type', { ...identity, text: args.text });
+    }
+    if (args.action === 'key') {
+      if (typeof args.key !== 'string' || args.key.length > 50) throw new Error('Invalid key');
+      if (process.platform !== 'win32') return native('key', { ...identity, key: args.key });
+      const verification = { settled: false }; this.keyVerification.set(windowKey(target), verification);
+      try { return { ...await native('key', { ...identity, key: args.key }), inputQueued: true, requiresScreenshot: true, verification: 'Take a fresh screenshot and verify the intended selection or state before typing.' }; }
+      finally { verification.settled = true; }
+    }
     if (['maximize', 'restore'].includes(args.action)) {
       let bounds;
       const key = `${target.pid}:${target.processStartedAt ?? ""}:${target.id}:${target.windowToken ?? ""}`;

@@ -172,7 +172,7 @@ test('Test Board publishes fresh native identity, values and bounds without enab
   const ipcMain = new EventEmitter(), app = new EventEmitter();
   Object.assign(app, { setName() {}, getPath: () => tmpdir(), whenReady: () => ({ then: fn => { callback = fn; } }), quit() {} });
   class BrowserWindow extends EventEmitter {
-    constructor() { super(); win = this; this.webContents = {}; this.bounds = { x: -100, y: 10, width: 680, height: 520 }; }
+    constructor() { super(); win = this; this.webContents = new EventEmitter(); this.bounds = { x: -100, y: 10, width: 680, height: 520 }; }
     isDestroyed() { return false; }
     getMediaSourceId() { return 'window:42:0'; }
     getBounds() { return this.bounds; }

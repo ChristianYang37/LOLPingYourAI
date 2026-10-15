@@ -43,7 +43,13 @@ try {
     }
   });
   await check('Unicode input and Ctrl+A reach only the intended edit control', async () => {
-    await command('focus'); await desktop.native('key', { ...identity(0), key: 'ctrl+a' });
+    await command('focus'); await command('keyAck'); await desktop.native('key', { ...identity(0), key: 'ctrl+a' });
+    let state;
+    for (let i = 0; i < 100; i++) {
+      state = await command('read'); if (state.ctrlReleased && state.selectedLength === state.values[0].length) break;
+      await new Promise(r => setTimeout(r, 20));
+    }
+    assert.ok(state.ctrlReleased && state.selectedLength === 10, 'Target processed Ctrl+A and final Ctrl key-up before dependent text');
     await desktop.native('type', { ...identity(0), text: 'Windows 中文 ✓ 😀\nSecond line.\r\nThird line.' });
     await values(['Windows 中文 ✓ 😀\r\nSecond line.\r\nThird line.', 'B'.repeat(10)]);
   });

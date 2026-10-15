@@ -31,6 +31,7 @@ try {
   const target = { id: state.windowId, pid: state.pid, processStartedAt: state.processStartedAt, windowToken: state.windowToken };
   for (const text of ['Windows 中文 ✓ 😀\nSecond line.\r\nThird line.', 'Electron long text. '.repeat(100), 'Ready for a ping.']) {
     await desktop.native('key', { ...target, key: 'ctrl+a' });
+    await wait(s => s.selection?.ctrlReleased && s.selection.start === 0 && s.selection.end === s.value.length);
     await desktop.native('type', { ...target, text });
     const expected = text.replaceAll('\r\n', '\n');
     assert.equal((await wait(s => s.value === expected)).value, expected);
