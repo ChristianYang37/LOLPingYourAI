@@ -7,6 +7,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     strategy:
@@ -60,6 +63,8 @@ jobs:
         run: |
           $env:LOLPINGAI_DESKTOP_HELPER = (Resolve-Path 'release/win-unpacked/resources/desktop-helper.exe').Path
           pnpm test:windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tools/windows/check-electron-input.mjs
       - name: NSIS install, app renderer, restart and uninstall
         if: runner.os == 'Windows'
         shell: pwsh

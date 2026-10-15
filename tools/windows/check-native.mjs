@@ -27,7 +27,7 @@ const values = async expected => {
 const desktop = new Desktop({ helper: resolve(process.env.LOLPINGAI_DESKTOP_HELPER || 'native/desktop/build/desktop-helper.exe') });
 let passed = 0;
 const check = async (name, fn) => { await fn(); console.log(`PASS ${++passed}: ${name}`); };
-const watchdog = setTimeout(() => { console.error('Windows fixture timed out'); fixture.kill(); process.exitCode = 1; }, 180000);
+const watchdog = setTimeout(() => { console.error('Windows fixture timed out'); fixture.kill(); process.exitCode = 1; }, 420000);
 try {
   const initial = await next();
   let targets = [];
@@ -44,8 +44,8 @@ try {
   });
   await check('Unicode input and Ctrl+A reach only the intended edit control', async () => {
     await command('focus'); await desktop.native('key', { ...identity(0), key: 'ctrl+a' });
-    await desktop.native('type', { ...identity(0), text: 'Windows 中文 ✓' });
-    await values(['Windows 中文 ✓', 'B'.repeat(10)]);
+    await desktop.native('type', { ...identity(0), text: 'Windows 中文 ✓ 😀\nSecond line.\r\nThird line.' });
+    await values(['Windows 中文 ✓ 😀\r\nSecond line.\r\nThird line.', 'B'.repeat(10)]);
   });
   await check('reused PID/birth and window lifetime markers are rejected', async () => {
     await assert.rejects(desktop.native('resolve', { ...identity(0), processStartedAt: '0' }), /process restarted/);
@@ -86,6 +86,25 @@ try {
     assert.ok(controller.signal.aborted); assert.ok(state.values[0].length >= 10 && state.values[0].length < 10000);
     assert.equal(state.values[1], ''); assert.ok(state.held.every(v => !v));
     console.log(`  cancelled after ${state.values[0].length} characters, total ${Date.now() - start}ms`);
+  });
+  await check('cancellation waits for a slow in-flight character handler', async () => {
+    await command('clear'); await command('focus'); await command('delay');
+    const controller = new AbortController(); let started, settled = false;
+    const processing = new Promise(resolve => { started = resolve; });
+    onInput = event => { if (event.delayStarted) { controller.abort(); started(); } };
+    const action = desktop.native('type', { ...identity(0), text: 'ZZ' }, controller.signal);
+    action.then(() => { settled = true; }, () => { settled = true; });
+    const rejected = assert.rejects(action, /cancelled/);
+    await processing; await new Promise(r => setTimeout(r, 1200));
+    assert.equal(settled, false, 'Do not confirm cancellation while the target is processing a character');
+    await rejected; onInput = undefined;
+    await values(['Z', '']);
+  });
+  await check('accepted 10,000-character text completes without timeout or cross-window input', async () => {
+    await command('clear'); await command('focus'); const text = 'Long text '.repeat(1000), start = Date.now();
+    await desktop.native('type', { ...identity(0), text });
+    const state = await values([text, '']); assert.ok(state.held.every(v => !v));
+    console.log(`  all ${text.length} characters independently read back in ${Date.now() - start}ms`);
   });
   await check('closed/recreated same-title window invalidates old identity', async () => {
     await command('recreate'); await assert.rejects(desktop.native('resolve', identity(0)), /closed or changed/);

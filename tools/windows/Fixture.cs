@@ -13,11 +13,20 @@ class Fixture {
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
     static JavaScriptSerializer json=new JavaScriptSerializer();
     static Form[] windows=new Form[2]; static TextBox[] notes=new TextBox[2];
-    static int stealAfter; static Form cover;
+    static int stealAfter, delayNext; static Form cover;
+    class Note : TextBox {
+        protected override void WndProc(ref Message m) {
+            if(m.Msg==0x0102 && delayNext>0) {
+                int delay=delayNext; delayNext=0;
+                Print(new{input=0,delayStarted=true,length=0}); Thread.Sleep(delay);
+            }
+            base.WndProc(ref m);
+        }
+    }
     static void Print(object value) { Console.WriteLine(json.Serialize(value)); Console.Out.Flush(); }
     static void Make(int i) {
         var f=new Form{Text="LOLPing Windows disposable fixture",StartPosition=FormStartPosition.Manual,Bounds=new Rectangle(120,120,560,360),MinimumSize=new Size(300,200)};
-        var t=new TextBox{Multiline=true,Dock=DockStyle.Fill,MaxLength=20000}; f.Controls.Add(t);
+        var t=new Note{Multiline=true,Dock=DockStyle.Fill,MaxLength=20000}; f.Controls.Add(t);
         // .NET Framework multiline TextBox does not implement Ctrl+A by default.
         t.KeyDown+=(s,e)=> { if(e.Control && e.KeyCode==System.Windows.Forms.Keys.A) { t.SelectAll(); e.SuppressKeyPress=true; } };
         windows[i]=f; notes[i]=t;
@@ -39,6 +48,7 @@ class Fixture {
                         if(op=="clear") { notes[0].Clear(); notes[1].Clear(); }
                         if(op=="move") windows[i].Left+=40;
                         if(op=="steal") stealAfter=10;
+                        if(op=="delay") delayNext=2500;
                         if(op=="recreate") { windows[0].Close(); Make(0); }
                         if(op=="cover") { cover=new Form{Text="LOLPing fixture obstruction",Bounds=windows[0].Bounds,StartPosition=FormStartPosition.Manual,TopMost=true,ShowInTaskbar=false}; cover.Show(); }
                         if(op=="uncover") { cover.Close(); cover=null; }

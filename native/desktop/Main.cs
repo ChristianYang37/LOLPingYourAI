@@ -36,8 +36,22 @@ class DesktopHelper {
     [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GuiInfo info);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr GetProp(IntPtr h, string name);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern bool SetProp(IntPtr h, string name, IntPtr value);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr h, uint message, UIntPtr wParam, IntPtr lParam);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll")] static extern bool GetProcessTimes(IntPtr process, out long created, out long exited, out long kernel, out long user);
     const string IdentityProperty = "LOLPingYourAI.WindowIdentity.v1";
-    static string Birth(uint pid) { using(var p=Process.GetProcessById((int)pid)) return p.StartTime.ToUniversalTime().Ticks.ToString(); }
+    static string Birth(uint pid) {
+        // Process.GetProcessById in .NET Framework enumerates process information;
+        // doing that per stroke is expensive on systems with many processes.
+        var process=OpenProcess(0x1000,false,pid);
+        if(process==IntPtr.Zero)throw new Exception("Cannot inspect target process identity");
+        try {
+            long created,exited,kernel,user;
+            if(!GetProcessTimes(process,out created,out exited,out kernel,out user))throw new Exception("Cannot read target process creation time");
+            return DateTime.FromFileTimeUtc(created).Ticks.ToString();
+        } finally { CloseHandle(process); }
+    }
     static bool DesktopAvailable() { var d=OpenInputDesktop(0,false,0x0100); if(d==IntPtr.Zero)return false; CloseDesktop(d); return true; }
     static void Cancel(Dictionary<string,object> args) { if(S(args,"cancelFile")!="" && File.Exists(S(args,"cancelFile"))) throw new Exception("Desktop action cancelled"); }
     static Rect Validate(IntPtr h, Dictionary<string,object> args, bool foreground) {
@@ -137,7 +151,26 @@ class DesktopHelper {
                             else { bool right=S(args,"button")=="right"; try { Send(new Input{type=0,data=new InputUnion{mouse=new Mouse{flags=right?8u:2u}}}); } finally { Send(new Input{type=0,data=new InputUnion{mouse=new Mouse{flags=right?16u:4u}}}); } }
                         } else if(op=="type") {
                             string text=S(args,"text");if(text.Length>10000)throw new Exception("Text too long"); var focus=Focus(h);
-                            foreach(char c in text) { Validate(h,args,true); if(Focus(h)!=focus)throw new Exception("Target input focus changed"); Stroke(0,c,4); Thread.Sleep(1); }
+                            // SendInput queues Unicode globally and can deliver queued characters
+                            // to a different window after focus theft. WM_CHAR is bound to the
+                            // verified control and synchronous, so there is no global text backlog.
+                            // Controls that do not support standard Unicode text must be verified
+                            // by readback; never fall back to unscoped global input.
+                            // WM_CHAR expects carriage returns. Collapse CRLF to one line break.
+                            foreach(char c in text.Replace("\r\n","\n").Replace('\n','\r')) {
+                                Validate(h,args,true); if(Focus(h)!=focus)throw new Exception("Target input focus changed");
+                                // No timeout: a timed-out WndProc can still apply the character.
+                                // A hung control must keep cancellation unconfirmed until it returns.
+                                if(c=='\r') {
+                                    // Chromium handles Enter on keydown; native edit controls use
+                                    // WM_CHAR. Both messages stay bound to this same control.
+                                    try {
+                                        SendMessage(focus,0x0100,new UIntPtr(13),new IntPtr(0x001c0001));
+                                        Validate(h,args,true); if(Focus(h)!=focus)throw new Exception("Target input focus changed");
+                                        SendMessage(focus,0x0102,new UIntPtr(c),new IntPtr(1));
+                                    } finally { SendMessage(focus,0x0101,new UIntPtr(13),new IntPtr(unchecked((int)0xc01c0001))); }
+                                } else SendMessage(focus,0x0102,new UIntPtr(c),new IntPtr(1));
+                            }
                         }
                         else if(op=="key") {
                             string[] parts=S(args,"key").ToLowerInvariant().Split('+'); var held=new List<ushort>();

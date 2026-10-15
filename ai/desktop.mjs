@@ -22,7 +22,10 @@ export class Desktop {
         child.kill(); killTimer = setTimeout(() => child.kill('SIGKILL'), 3000); };
       signal?.addEventListener('abort', abort, { once: true });
       const cleanup = () => { clearTimeout(timer); clearTimeout(killTimer); signal?.removeEventListener('abort', abort); if (cancelDir) rmSync(cancelDir, { recursive: true, force: true }); };
-      let output = '', error = ''; const timer = setTimeout(abort, 30000);
+      // Give synchronous target controls time to consume accepted long text;
+      // explicit cancellation is still checked between individual characters.
+      const timeoutMs = cooperative && op === 'type' ? 30000 + Math.min(10000, args.text?.length ?? 0) * 30 : 30000;
+      let output = '', error = ''; const timer = setTimeout(abort, timeoutMs);
       child.stdin.on('error', e => { error ||= e.message; });
       child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { error += d; });
       child.on('error', e => { cleanup(); reject(e); });
