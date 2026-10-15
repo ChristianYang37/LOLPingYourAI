@@ -57,7 +57,7 @@ The teammate is your existing Codex, Claude or DSH harness, with its own model, 
 - Reasoning defaults to **0**, the model's lowest supported level. **1** chooses the next level; larger indices clamp to the model's maximum. The effective level is displayed after a turn starts. DSH defaults to thinking on: its indices count enabled levels, with a separate off switch.
 - **DeepSeek Harness (DSH)** is available through ACP. See [installation, free text API setup and verification limits](docs/dsh.md).
 
-These changes are in the source tree; the v0.1.0 release linked below predates them.
+These changes are included in the v0.1.1 macOS release linked below.
 
 ## Signals
 
@@ -100,7 +100,7 @@ The native helper inherited from lolPing handles press, drag, release and cancel
 
 ## Quick start (macOS)
 
-1. **Install.** Download **LOLPingYourAI-0.1.0-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
+1. **Install.** Download **LOLPingYourAI-0.1.1-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.1) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
 2. **Connect a teammate.** Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) (`codex login`). The CLI bundled with the Codex desktop app is found automatically. Claude is experimental (see [Platform status](#platform-status)).
 3. **Grant permissions.** Open the app, then enable **Accessibility** and **Screen Recording** for LOLPingYourAI in *System Settings → Privacy & Security* and restart it. **AI Teammate** in settings shows both checks.
 4. **Ping.** Hover anything, hold <kbd>⌥ Option</kbd> + left mouse, drag, and release on **?**. <kbd>⌃ Control</kbd> + drag opens the emote wheel.
