@@ -184,12 +184,15 @@ pnpm dev
 pnpm typecheck
 pnpm test:helper                                # C++ 输入助手
 pnpm test                                       # Vitest + AI 桥接测试
+pnpm test:acceptance                            # 跨平台验收工具的协议测试
 pnpm build && pnpm exec electron tools/check-assets.cjs
 pnpm exec electron tools/check-agent-queue.cjs  # 真实覆盖层 + Web Audio 播放队列
 pnpm exec electron tools/test-board.cjs         # 手动测试用的一次性窗口
 pnpm dist:mac                                   # 在 release/ 生成 Apple Silicon DMG
 pnpm dist                                       # Windows x64 安装包（需在 Windows 上执行）
 ```
+
+可复用的[验收工具](tools/acceptance/README.md)通过本地桥接支持 Codex、Claude、DSH，诊断输出仅保存在本地。尚未解决的原生输入和界面问题见 [Claude 问题审核与修复方案](docs/claude-acceptance-audit.md)。
 
 | 路径 | 内容 |
 | --- | --- |

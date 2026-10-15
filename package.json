@@ -18,6 +18,8 @@
     "dist": "npm run build:helper && npm run build:desktop && electron-vite build && electron-builder --win --publish never",
     "dist:mac": "npm run build:helper && npm run build:desktop && electron-vite build && electron-builder --mac --arm64 --publish never",
     "test:ai": "node --test ai/test/*.test.mjs",
+    "test:acceptance": "node --test tools/acceptance/test/*.test.mjs",
+    "acceptance": "node tools/acceptance/run.mjs",
     "build:desktop": "node native/desktop/build.mjs"
   },
   "devDependencies": {

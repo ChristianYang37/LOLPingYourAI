@@ -184,12 +184,15 @@ pnpm dev
 pnpm typecheck
 pnpm test:helper                                # C++ input helper
 pnpm test                                       # Vitest + AI bridge tests
+pnpm test:acceptance                            # Portable acceptance-tool protocol tests
 pnpm build && pnpm exec electron tools/check-assets.cjs
 pnpm exec electron tools/check-agent-queue.cjs  # real overlay + Web Audio queue
 pnpm exec electron tools/test-board.cjs         # disposable window for manual tests
 pnpm dist:mac                                   # Apple Silicon DMG in release/
 pnpm dist                                       # Windows x64 installer (run on Windows)
 ```
+
+Reusable [acceptance tools](tools/acceptance/README.md) support Codex, Claude and DSH through the local bridge, with local-only diagnostic output. See the [Claude findings and repair plan](docs/claude-acceptance-audit.md) for the remaining native-input and UI issues.
 
 | Path | What lives there |
 | --- | --- |

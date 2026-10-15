@@ -24,6 +24,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: node node_modules/electron/install.js
       - run: pnpm typecheck
+      - run: pnpm test:acceptance
       - run: pnpm test:helper
       - run: pnpm build:desktop
       - run: pnpm test
