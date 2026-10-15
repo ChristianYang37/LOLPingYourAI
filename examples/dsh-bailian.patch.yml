@@ -1,0 +1,28 @@
+# DSH 0.2.0-rc.2. Keep credentials in DSH's local store, never in this file.
+# Verify your own Beijing-region free quota and enable free-quota-only before use.
+# Supports screenshot input and tool calling; no fallback to another model.
+- id: llm-pi-ai
+  config:
+    providers:
+      bailian:
+        displayName: Alibaba Cloud Bailian
+        apiKeyEnv: DASHSCOPE_API_KEY
+        api: openai-completions
+        baseURL: https://dashscope.aliyuncs.com/compatible-mode/v1
+        compat:
+          thinkingFormat: qwen
+          supportsReasoningEffort: false
+          supportsDeveloperRole: false
+          supportsStore: false
+        models:
+          - id: qwen3.8-flash
+            input: [text, image]
+            contextWindow: 1000000
+            maxTokens: 4096
+            reasoningEfforts:
+              off:
+              high: high
+- id: acp
+  config:
+    provider: bailian
+    model: qwen3.8-flash

@@ -24,6 +24,7 @@ export class Desktop {
     return { ...w, bounds: this.electron.screen.screenToDipRect(null, w.bounds) };
   }
   async resolve(target) { return this.normalizeWindow(await this.native('resolve', { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt })); }
+  async locate(point) { return windowAnchor(this.normalizeWindow(await this.native('target', this.toNativePoint(point))), point); }
   capture(pointOrTarget, size, tracked = false) {
     const job = this.captureTail.then(() => this.captureNow(pointOrTarget, size, tracked));
     this.captureTail = job.catch(() => {}); return job;

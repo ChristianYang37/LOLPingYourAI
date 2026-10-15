@@ -1,4 +1,4 @@
-export const defaults = Object.freeze({ regionSize: 512, sessionHours: 2, wardHours: 0.5, harness: 'codex', banter: true });
+export const defaults = Object.freeze({ regionSize: 512, sessionHours: 2, wardHours: 0.5, harness: 'codex', banter: true, reasoningEffort: 0, dshThinking: true, setupComplete: false });
 
 export const signals = Object.freeze({
   missing: { label: 'Question', mode: 'observe', prompt: 'Explain or diagnose the highlighted region. Observe only; do not change anything.' },
@@ -24,8 +24,11 @@ export function validateConfig(value = {}) {
     if (!Number.isFinite(result[key]) || result[key] < min || result[key] > max) throw new Error(`${key} must be between ${min} and ${max}`);
   }
   if (!Number.isInteger(result.regionSize)) throw new Error('regionSize must be an integer');
-  if (!['codex', 'claude'].includes(result.harness)) throw new Error('Unknown harness');
+  if (!['codex', 'claude', 'dsh'].includes(result.harness)) throw new Error('Unknown harness');
+  if (typeof result.dshThinking !== 'boolean') throw new Error('dshThinking must be boolean');
   if (typeof result.banter !== 'boolean') throw new Error('banter must be boolean');
+  if (!Number.isInteger(result.reasoningEffort) || result.reasoningEffort < 0 || result.reasoningEffort > 8) throw new Error('Reasoning level must be an integer from 0 to 8');
+  if (typeof result.setupComplete !== 'boolean') throw new Error('setupComplete must be boolean');
   const modes = new Set(['observe', 'execute', 'interrupt', 'stop', 'ward', 'unward', 'emotion']);
   for (const [id, entry] of Object.entries(result.mappings ?? {})) {
     if (!/^[a-zA-Z0-9_:-]{1,80}$/.test(id) || !modes.has(entry.mode) || typeof entry.prompt !== 'string' || entry.prompt.length > 12000) throw new Error('Invalid signal mapping');

@@ -57,3 +57,12 @@ test('overlapping resume and interval ticks share one scheduler execution', asyn
   const first = wards.tick(); await started; await wards.tick(); release(); await first;
   assert.equal(availabilityCalls, 1); assert.equal(visits, 1);
 });
+
+test('visit-now remains pending while locked; cancel by id leaves other wards intact', async () => {
+  let now = 0, available = false, visited = [];
+  const store = { read: async (_, d) => d, write: async () => {} };
+  const w = new Wards(store, { now: () => now, available: async () => available, visit: async item => visited.push(item.id) }); await w.init();
+  const a = await w.add({ id: 'window' }, .5, 'codex'), b = await w.add({ id: 'window' }, .5, 'codex');
+  await w.update(a.id, 'cancel'); await w.update(b.id, 'now'); await w.tick(); assert.deepEqual(visited, []);
+  available = true; await w.tick(); assert.deepEqual(visited, [b.id]); assert.equal(a.status, 'cancelled');
+});

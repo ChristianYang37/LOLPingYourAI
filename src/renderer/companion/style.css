@@ -1,0 +1,6 @@
+@import '../settings/conversation.css';
+:root { color-scheme: dark; font: 13px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; background: #101d27; color: #e3eef1; }
+body { margin: 0; } #root { height: 100vh; }
+.conversation { height: 100%; box-sizing: border-box; border: 1px solid #47716f; border-radius: 12px; }
+.conversation header { -webkit-app-region: drag; }
+.conversation button, .conversation input { -webkit-app-region: no-drag; }

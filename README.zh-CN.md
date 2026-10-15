@@ -6,7 +6,7 @@
 
 **在桌面任何地方 ping 一下，AI 队友立刻拿到上下文。**
 
-按住 <kbd>⌥ Option</kbd> 拖动，松开选中信号。像在峡谷里打信号一样，把你指着的地方、它所在的窗口和这个信号的意思一起发给 Codex 或 Claude 队友。它会反 ping 你、解释、动手操作那个窗口；你喊一声 **危险**，它马上停下。
+按住 <kbd>⌥ Option</kbd> 拖动，松开选中信号。像在峡谷里打信号一样，把你指着的地方、它所在的窗口和这个信号的意思一起发给 Codex、Claude 或 DSH 队友。它会反 ping 你、解释、动手操作那个窗口；你喊一声 **危险**，它马上停下。
 
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/releases/latest"><img src="https://img.shields.io/github/v/release/ChristianYang37/LOLPingYourAI?label=release&color=c8aa6e&labelColor=0a1428" alt="最新版本"></a>
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ChristianYang37/LOLPingYourAI/ci.yml?branch=main&label=CI&labelColor=0a1428" alt="CI"></a>
@@ -32,7 +32,7 @@
 - **什么**：区域所在的窗口，包括应用、标题、位置和稳定的窗口 ID。
 - **想干嘛**：信号对应的指令，例如*解释一下*、*帮我做完*、*停下*、*30 分钟后再来看看*。
 
-队友就是你已经在用的 Codex 或 Claude harness，沿用它自己的模型、账号、工具和记忆。LOLPingYourAI 不另造规划器，也不另做历史检索服务，只负责 ping、内置的 skill 和一组范围很窄的桌面工具。
+队友就是你已经在用的 Codex、Claude 或 DSH harness，沿用它自己的模型、账号、工具和记忆。LOLPingYourAI 不另造规划器，也不另做历史检索服务，只负责 ping、内置的 skill 和一组范围很窄的桌面工具。
 
 <table>
 <tr>
@@ -46,6 +46,17 @@
 <td valign="top"><img src="assets/textures/emote_super_approved.png" width="36" alt=""><br><b>轮盘和表情随你改</b><br>可以重排槽位、改信号内容，导入或裁切表情，也能让队友画一个。发个<i>弱爆</i>，它可能还会回嘴。</td>
 </tr>
 </table>
+
+## 队友交互
+
+- 目标附近显示轻量回复卡，不主动抢焦点；可以展开、复制、追问和回答澄清。
+- 状态用 LoL 图标显示：**已收到 → 正在理解 → 正在执行／等你回答 → 已完成**。完成反应沿用图标与音效串行播放队列。
+- 普通信号排队，警告／撤退立即中断，交战切换目标；插眼／排眼不打断当前任务，表情追加到原会话。
+- 首次使用引导检查连接与权限，提供只读测试。设置分成**队友／信号／表情／回访**四页，并可切换中英文；回访支持倒计时、取消和立即回访。
+- 思考强度默认 **0**，即当前模型最低档；**1** 是第二低档，超出范围取最高档。启动一轮后显示实际生效值。DSH 默认开启思考，数字只计算开启档，关闭思考使用独立开关。
+- 新增 **DeepSeek Harness（DSH）ACP** 适配，详见[安装、免费 API 配置与验证范围](docs/dsh.md#中文)。
+
+以上改动已在源码中；下方 v0.1.0 发布包早于这些改动。
 
 ## 信号
 
@@ -107,7 +118,7 @@ sequenceDiagram
   ```
   `LOLPINGAI_CLAUDE` 可以用同样方式指定 Claude Code 可执行文件。
 - **审批**：harness 的工具审批、提问和权限请求都会显示在 **AI Teammate** 中，不会被悄悄同意。
-- **费用**：模型服务可能产生用量费用；本应用不提供账号或 API key。Release 附带 `SHA256SUMS` 供校验。
+- **费用**：模型服务可能产生用量费用；本应用不提供账号或 API key。
 
 </details>
 
@@ -116,8 +127,9 @@ sequenceDiagram
 | 组合 | 状态 |
 | --- | --- |
 | macOS Apple Silicon＋**Codex** | ✅ 已用真实模型跑通桌面闭环（解释、编辑、中断、恢复、最大化、插眼），提供 DMG |
-| macOS＋**Claude** | 🧪 实验性 Agent SDK 适配器，带只读上下文工具；已有测试覆盖，尚未用已登录账号实测 |
-| Windows＋Codex／Claude | 🛠️ 已包含适配器、Win32 助手和安装脚本；尚未在 Windows 实机验证 |
+| macOS＋**Claude** | 🧪 Agent SDK 适配器，带只读上下文工具；贡献者已报告 macOS 登录实测，见[验证记录](docs/verification.md) |
+| macOS＋**DSH** | 🧪 前一安装版已完成百炼截图、编辑和恢复实测；当前源码已验证协议与回归。[安装与验证范围](docs/dsh.md#中文) |
+| Windows＋Codex／Claude／DSH | 🛠️ 已包含适配器、Win32 助手和安装脚本；尚未在 Windows 实机验证 |
 
 哪些真正测过、哪些没有，都记录在 [docs/verification.md](docs/verification.md)。
 
@@ -184,7 +196,7 @@ pnpm dist                                       # Windows x64 安装包（需在
 | `native/desktop/` | Swift／C# 助手：窗口定位、截图、受限输入 |
 | `src/main/` | Electron 主进程、覆盖层、设置、队友生命周期 |
 | `src/renderer/` | 信号与表情轮盘覆盖层、React 设置窗口 |
-| `ai/` | 队友服务、Codex／Claude 适配器、MCP 服务、本地桥接、命令行 |
+| `ai/` | 队友服务、Codex／Claude／DSH 适配器、MCP 服务、本地桥接、命令行 |
 | `skills/lolping-your-ai/` | 教会 agent 理解每个信号的 skill |
 | `promo/` | 演示视频与 README 动图的 Remotion 源码 |
 
@@ -195,7 +207,7 @@ pnpm dist                                       # Windows x64 安装包（需在
 ## 欢迎参与
 
 - 在 **Windows** 上跑一跑，告诉我们哪里坏了。
-- 用**已登录的 Claude** 按[验收步骤](docs/acceptance.md)完整走一遍。
+- 用**已登录的 Claude** 重跑整合回复卡片和思考档位后的[验收步骤](docs/acceptance.md)。
 - 物理多显示器、混合 DPI、睡眠／锁屏场景测试。
 - macOS 版本的 Developer ID 签名与公证。
 - 让原生 Computer Use 后端接入统一的取消闸门。
