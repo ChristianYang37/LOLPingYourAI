@@ -91,11 +91,30 @@ test('switching harness keeps separate sessions and queues behind former desktop
 
 test('teammate history keeps text but drops screenshot payloads', async () => {
   const { service, adapter } = await fixture(), image = 'iVBORw0KGgo' + 'A'.repeat(300000);
+  await service.configure({ diagnosticsEnabled: true });
   adapter.emit('event', { method: 'claude/message', params: { type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'image', source: { data: image } }, { type: 'text', text: 'Mapped region.' }] }] } } });
   adapter.emit('event', { method: 'item/agentMessage/delta', params: { itemId: 'a', delta: 'Done. ' } }); adapter.emit('event', { method: 'item/agentMessage/delta', params: { itemId: 'a', delta: 'Note restored.' } });
   const [tool, reply] = service.status().history.map(h => h.event.params);
   assert.match(tool.message.content[0].content[0].source.data, /^\[300011 characters of binary data omitted\]$/); assert.equal(tool.message.content[0].content[1].text, 'Mapped region.');
   assert.equal(reply.delta, 'Done. Note restored.'); assert.ok(JSON.stringify(service.status().history).length < 2000);
+});
+
+test('diagnostics default off, disabling clears protocol events but retains chat', async () => {
+  const { service, adapter } = await fixture();
+  assert.equal(service.config.diagnosticsEnabled, false);
+  await service.message({ text: 'Keep this conversation' });
+  const delta = { method: 'item/agentMessage/delta', params: { delta: 'Hello', itemId: 'one' } };
+  adapter.emit('event', delta);
+  assert.deepEqual(service.history, []);
+  assert.equal(service.task.text, 'Hello');
+  await service.configure({ diagnosticsEnabled: true });
+  adapter.emit('event', delta);
+  assert.equal(service.history.length, 1);
+  await service.configure({ diagnosticsEnabled: false });
+  assert.deepEqual(service.history, []);
+  assert.ok(service.conversation.page().entries.some(row => row.text === 'HelloHello'));
+  await assert.rejects(service.configure({ diagnosticsEnabled: 'true' }), /boolean/);
+  service.close();
 });
 
 test('normal pings queue without cancelling; moved targets are captured fresh when admitted', async () => {

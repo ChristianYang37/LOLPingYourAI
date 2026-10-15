@@ -3,12 +3,12 @@ import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import sharp from 'sharp';
+import { bitmapLayout, focusImage } from './capture-image.mjs';
 import { squareRegion, windowAnchor, anchoredPoint } from './geometry.mjs';
 const windowKey = target => `${target.pid}:${target.processStartedAt ?? ''}:${target.id}:${target.windowToken ?? ''}`;
 
 export class Desktop {
-  constructor({ electron, helper, dataDir, overlays, pingIds }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds }); this.savedBounds = new Map(); this.keyVerification = new Map(); this.captureTail = Promise.resolve(); }
+  constructor({ electron, helper, dataDir, overlays, pingIds }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds }); this.bitmapLayout = bitmapLayout(electron?.nativeImage); this.savedBounds = new Map(); this.keyVerification = new Map(); this.captureTail = Promise.resolve(); }
   native(op, args = {}, signal) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) return reject(new Error('Desktop action cancelled'));
@@ -78,8 +78,7 @@ export class Desktop {
       const extract = { left: Math.max(0, Math.round((region.valid.x - captureBounds.x) * sx)), top: Math.max(0, Math.round((region.valid.y - captureBounds.y) * sy)), width: Math.round(region.valid.width * sx), height: Math.round(region.valid.height * sy) };
       extract.width = Math.min(extract.width, actual.width - extract.left); extract.height = Math.min(extract.height, actual.height - extract.top);
       if (extract.width < 1 || extract.height < 1) throw new Error('Target region is outside the display');
-      const cropped = await sharp(image.toPNG()).extract(extract).resize(region.valid.width, region.valid.height).png().toBuffer();
-      return sharp({ create: { width: size, height: size, channels: 4, background: '#151922' } }).composite([{ input: cropped, left: region.padding.left, top: region.padding.top }]).png().toBuffer();
+      return focusImage(image, extract, region.valid, region.padding, size, this.bitmapLayout);
     });
     region.imageScale = 1; region.imageWidth = size; region.imageHeight = size;
     const dir = join(this.dataDir, 'captures'); await mkdir(dir, { recursive: true, mode: 0o700 });

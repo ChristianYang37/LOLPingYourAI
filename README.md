@@ -196,6 +196,7 @@ pnpm typecheck
 pnpm test:helper                                # C++ input helper
 pnpm test                                       # Vitest + AI bridge tests
 pnpm test:acceptance                            # Portable acceptance-tool protocol tests
+pnpm test:performance                           # Local performance gates; no API calls
 pnpm build && pnpm exec electron tools/check-assets.cjs
 pnpm exec electron tools/check-agent-queue.cjs  # real overlay + Web Audio queue
 pnpm exec electron tools/test-board.cjs         # disposable window for manual tests
@@ -234,3 +235,5 @@ Thanks to [@fzh000543](https://github.com/fzh000543) for publishing an early [Wi
 Derived from [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1, which provides the input helper, radial wheels, overlays, settings and emote import. Copyright © 2026 Danrui Meng, MIT. Code in this repository is MIT ([LICENSE](LICENSE)).
 
 League of Legends artwork, animations and audio © Riot Games, Inc. They are **not** covered by the MIT license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is an independent fan project, not endorsed by Riot Games, OpenAI or Anthropic.
+
+Connection & diagnostics is off by default. Enable it explicitly in Settings → AI Teammate when troubleshooting. With it off, raw protocol events are not collected; chat and ping history remain available. See [performance testing](docs/performance.md) for CI scope, budgets and local measurements.

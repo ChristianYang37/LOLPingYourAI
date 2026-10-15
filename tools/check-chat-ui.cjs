@@ -15,7 +15,7 @@ const settings = { ...DEFAULT_SETTINGS, language: 'zh-CN' };
 let state = { config: { harness: 'codex', setupComplete: true, modelSelections: {}, reasoningEffort: 0, regionSize: 512, wardHours: .5, banter: true }, task: null, signals: {}, sessions: {}, pending: [], approvals: [], wards: [] };
 const calls = [];
 for (const [channel, value] of Object.entries({ 'settings:get': settings, 'status:get': { enabled: true, helper: 'running' }, 'app:about': null, 'app:capture': null, 'update:get': null })) ipcMain.handle(channel, () => value);
-ipcMain.handle('ai:call', (_e, method, args) => { calls.push({ method, args }); if (method === 'status') return state; if (method === 'conversation') return { entries: [{ id: 'older', role: 'user', kind: 'text', time: 1, text: '更早的聊天' }], hasMore: false }; if (method === 'candidates') return []; if (method === 'models') return { models: [], defaultModel: '' }; return {}; });
+ipcMain.handle('ai:call', (_e, method, args) => { calls.push({ method, args }); if (method === 'status') return state; if (method === 'conversation') return { entries: [{ id: 'older', role: 'user', kind: 'text', time: 1, text: '更早的聊天' }], hasMore: false }; if (method === 'config') { state = { ...state, config: { ...state.config, ...args } }; return state.config; } if (method === 'candidates') return []; if (method === 'models') return { models: [], defaultModel: '' }; return {}; });
 const delay = ms => new Promise(r => setTimeout(r, ms));
 async function waitFor(label, predicate) {
   const deadline = Date.now() + 10000;
@@ -81,6 +81,15 @@ app.whenReady().then(async () => {
     await click('.workspace-switch'); await delay(100);
     await js("[...document.querySelectorAll('.settings-side button')].find(b=>b.textContent.includes('AI 队友')).click()"); await delay(100);
     assert.equal(await js("document.querySelector('.settings-content').textContent.includes('闲置重置')"), false);
+    assert.equal(await js("document.querySelector('[data-testid=diagnostics-toggle]').checked"), false);
+    assert.equal(await js("document.querySelector('[data-testid=diagnostics-panel]') === null"), true);
+    assert.equal(calls.some(c => c.method === 'doctor' || c.method === 'connection'), false);
+    await click('[data-testid=diagnostics-toggle]');
+    await waitFor('diagnostics enabled', () => visible('[data-testid=diagnostics-panel]'));
+    assert.equal(await js("document.querySelector('[data-testid=diagnostics-panel]').open"), false);
+    await click('[data-testid=diagnostics-toggle]');
+    await waitFor('diagnostics disabled', () => js("document.querySelector('[data-testid=diagnostics-panel]') === null"));
+
     await click('.workspace-switch'); await delay(100);
     writeFileSync(path.join(tmpdir(), 'lolping-conversation-history.png'), (await win.webContents.capturePage()).toPNG());
     nativeTheme.themeSource = 'dark'; win.setSize(720, 520); await delay(250);

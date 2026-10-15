@@ -30,12 +30,14 @@ export class Teammate extends EventEmitter {
         }
         if (owns && this.task) this.syncReply();
         if (event.method === 'serverRequest/resolved') this.approvals = this.approvals.filter(p => p.harness !== name || p.request.id !== event.params.requestId);
-        if (event.method === 'item/agentMessage/delta') {
-          const last = this.history.at(-1);
-          if (last?.event.method === event.method && last.event.params.itemId === event.params.itemId) last.event.params.delta += event.params.delta;
-          else this.history.push({ harness: name, time: this.now(), event: compact(event) });
-        } else this.history.push({ harness: name, time: this.now(), event: compact(event) });
-        this.history = this.history.slice(-150); this.emit('change');
+        if (this.config?.diagnosticsEnabled) {
+          if (event.method === 'item/agentMessage/delta') {
+            const last = this.history.at(-1);
+            if (last?.event.method === event.method && last.event.params.itemId === event.params.itemId) last.event.params.delta += event.params.delta;
+            else this.history.push({ harness: name, time: this.now(), event: compact(event) });
+          } else this.history.push({ harness: name, time: this.now(), event: compact(event) });
+          this.history = this.history.slice(-150);
+        } this.emit('change');
       });
       adapter.on('completed', p => {
         this.outcomes?.set(`${name}:${p.threadId}`, p.turn.status);
@@ -99,7 +101,7 @@ export class Teammate extends EventEmitter {
     try { return await adapter.listModels({ refresh }); }
     finally { this.refreshingModels = false; this.emit('change'); this.pump(); }
   }
-  async configure(patch) { this.config = validateConfig({ ...this.config, ...patch }); await this.store.write('ai-config', this.config); this.emit('change'); return this.config; }
+  async configure(patch) { this.config = validateConfig({ ...this.config, ...patch }); if (!this.config.diagnosticsEnabled) this.history = []; await this.store.write('ai-config', this.config); this.emit('change'); return this.config; }
   async dispatch(raw) {
     if (raw.source === 'agent' || raw.source === 'remote') return { ignored: true };
     const id = raw.id ?? randomUUID();

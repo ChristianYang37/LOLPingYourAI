@@ -1,4 +1,4 @@
-export const defaults = Object.freeze({ regionSize: 512, wardHours: 0.5, harness: 'codex', banter: true, reasoningEffort: 0, dshThinking: true, modelSelections: {}, setupComplete: false });
+export const defaults = Object.freeze({ regionSize: 512, wardHours: 0.5, harness: 'codex', banter: true, reasoningEffort: 0, dshThinking: true, modelSelections: {}, setupComplete: false, diagnosticsEnabled: false });
 
 export const signals = Object.freeze({
   missing: { label: 'Question', mode: 'observe', prompt: 'Explain or diagnose the highlighted region. Observe only; do not change anything.' },
@@ -29,6 +29,7 @@ export function validateConfig(value = {}) {
   if (typeof result.dshThinking !== 'boolean') throw new Error('dshThinking must be boolean');
   if (typeof result.banter !== 'boolean') throw new Error('banter must be boolean');
   if (!Number.isInteger(result.reasoningEffort) || result.reasoningEffort < 0 || result.reasoningEffort > 8) throw new Error('Reasoning level must be an integer from 0 to 8');
+  if (typeof result.diagnosticsEnabled !== 'boolean') throw new Error('diagnosticsEnabled must be boolean');
   if (typeof result.setupComplete !== 'boolean') throw new Error('setupComplete must be boolean');
   if (!result.modelSelections || typeof result.modelSelections !== 'object' || Array.isArray(result.modelSelections)) throw new Error('Invalid model selections');
   for (const [harness, selection] of Object.entries(result.modelSelections)) {
