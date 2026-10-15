@@ -27,6 +27,7 @@ import { useAppState, type Update } from './useAppState';
 import { useUpdateState } from './useUpdateState';
 
 const PLATFORM = api.platform;
+const appLogo = new URL('../../../build/icon.png', import.meta.url).href;
 const MAC = PLATFORM === 'mac';
 /** macOS measures the screen in points. */
 const LENGTH_UNIT = MAC ? 'pt' : 'px';
@@ -120,12 +121,12 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   return (
     <div className="app">
       <div className="titlebar">
-        <img src={textureUrl('generic_ping')} alt="" />
+        <img src={appLogo} alt="" />
         LOLPingYourAI
       </div>
       <nav className="side">
         <div className="brand">
-          <img src={textureUrl('pingwheel_basicpingrender')} alt="" />
+          <img src={appLogo} alt="" />
           <div>
             <b>LOLPingYourAI</b>
             <span className="desc">{t.tagline}</span>
