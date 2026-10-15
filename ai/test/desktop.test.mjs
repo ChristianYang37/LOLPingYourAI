@@ -37,6 +37,36 @@ test('a moved target refuses stale coordinate actions', async () => {
   await assert.rejects(desktop.action({ action: 'click', x: 25, y: 25 }, { target: { bounds: { x: 0, y: 0, width: 100, height: 100 } } }), /Window moved/);
 });
 
+test('Windows requires a successful fresh observation after queued keys before typing', { skip: process.platform !== 'win32' }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'lolping-key-observation-'));
+  const bounds = { x: 0, y: 0, width: 512, height: 512 };
+  const target = { id: '11', pid: 22, windowToken: 'original', bounds, relative: { x: .5, y: .5 } };
+  const png = await sharp({ create: { width: 512, height: 512, channels: 4, background: '#ffffff' } }).png().toBuffer();
+  const sources = [{ id: 'window:11:0', thumbnail: { isEmpty: () => false, getSize: () => ({ width: 512, height: 512 }), toPNG: () => png } }];
+  const capturer = { getSources: async () => sources };
+  const desktop = new Desktop({ dataDir: dir, overlays: { captureWithoutOverlays: fn => fn() }, electron: { screen: { getDisplayNearestPoint: () => ({ id: 1, bounds, scaleFactor: 1 }) }, desktopCapturer: capturer } });
+  desktop.resolve = async value => value;
+  let typed = 0;
+  desktop.native = async op => { if (op === 'type') typed++; return op === 'doctor' ? { locked: false, screenRecording: true } : { ok: true }; };
+  const key = () => desktop.action({ action: 'key', key: 'ctrl+a' }, { target });
+  const type = () => desktop.action({ action: 'type', text: 'Verified' }, { target });
+  try {
+    assert.equal((await key()).requiresScreenshot, true);
+    await assert.rejects(type(), /fresh screenshot/); assert.equal(typed, 0);
+    capturer.getSources = async () => { throw new Error('capture failed'); };
+    await assert.rejects(desktop.capture(target, 512, true), /capture failed/);
+    await assert.rejects(type(), /fresh screenshot/);
+    let entered, release;
+    const started = new Promise(r => { entered = r; }), pending = new Promise(r => { release = r; });
+    capturer.getSources = async () => { entered(); await pending; return sources; };
+    const oldCapture = desktop.capture(target, 512, true); await started;
+    await key(); release(); await oldCapture;
+    await assert.rejects(type(), /fresh screenshot/, 'An in-flight screenshot cannot verify a later key');
+    capturer.getSources = async () => sources;
+    await desktop.capture(target, 512, true); await type(); assert.equal(typed, 1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test('resolve preserves the process birth marker instead of silently rebinding a PID', async () => {
   const desktop = new Desktop({});
   desktop.native = async (op, args) => {
@@ -66,6 +96,29 @@ test('window restore state is not inherited by a reused PID and window ID', asyn
   await desktop.action({ action: 'maximize' }, { target });
   target = { ...target, processStartedAt: 200 };
   await assert.rejects(desktop.action({ action: 'restore' }, { target }), /No original window bounds saved/);
+});
+
+test('failed maximize does not save a false original; repeated maximize preserves first successful original', async () => {
+  let target = { id: '1', pid: 2, windowToken: '10', bounds: { x: 10, y: 20, width: 300, height: 200 } };
+  const desktop = new Desktop({ electron: { screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1000, height: 800 } }), dipToScreenRect: (_, b) => b } } });
+  desktop.resolve = async () => target; desktop.native = async () => { throw new Error('constrained'); };
+  await assert.rejects(desktop.action({ action: 'maximize' }, { target }), /constrained/);
+  await assert.rejects(desktop.action({ action: 'restore' }, { target }), /No original/);
+  const original = target.bounds; desktop.native = async () => ({ ok: true });
+  await desktop.action({ action: 'maximize' }, { target });
+  target = { ...target, bounds: { x: 0, y: 0, width: 1000, height: 800 } };
+  await desktop.action({ action: 'maximize' }, { target });
+  desktop.native = async (_op, args) => { assert.deepEqual(args.bounds, original); };
+  await desktop.action({ action: 'restore' }, { target });
+});
+
+test('Windows coordinate guard retains physical bounds through fractional DIP rounding', { skip: process.platform !== 'win32' }, async () => {
+  const nativeBounds = { x: 101, y: 101, width: 501, height: 401 };
+  const desktop = new Desktop({ electron: { screen: { screenToDipRect: (_, b) => Object.fromEntries(Object.entries(b).map(([k,v]) => [k, Math.round(v / 1.25)])), dipToScreenPoint: p => p } } });
+  const target = desktop.normalizeWindow({ id: '1', pid: 2, windowToken: 'lifetime', bounds: nativeBounds });
+  desktop.resolve = async () => target;
+  desktop.native = async (_op, args) => { assert.deepEqual(args.expectedBounds, nativeBounds); assert.equal(args.windowToken, 'lifetime'); };
+  await desktop.action({ action: 'click', x: 150, y: 150 }, { target });
 });
 
 test('an initial ping captures the exact window even when app settings cover the screen', async () => {

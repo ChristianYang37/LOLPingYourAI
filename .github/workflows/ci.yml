@@ -3,15 +3,27 @@ on:
   push:
     branches: ['**']
   pull_request:
+  workflow_call:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            node: 22
+          - os: windows-2022
+            node: 22
+          - os: windows-2025
+            node: 24
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -19,14 +31,23 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: node node_modules/electron/install.js
       - run: pnpm typecheck
       - run: pnpm test:acceptance
-      - run: pnpm test:helper
+      - if: runner.os != 'Windows'
+        run: pnpm test:helper
+      - name: C++20 helper and tests under Chinese Windows code page
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          chcp 936 >nul
+          node native/hook-helper/run.mjs test
       - run: pnpm build:desktop
+      - if: runner.os == 'Windows'
+        run: pnpm test:windows
       - run: pnpm test
       - run: pnpm build
       - run: pnpm exec electron tools/check-chat-ui.cjs
@@ -34,5 +55,26 @@ jobs:
       - if: runner.os == 'macOS'
         run: pnpm exec electron-builder --mac --dir --publish never
       - if: runner.os == 'Windows'
-        run: pnpm exec electron-builder --win --dir --publish never
+        run: pnpm exec electron-builder --win --publish never --config.extraMetadata.buildCommit=${{ github.sha }}
       - run: node tools/check-packaged-runtime.cjs release
+      - name: Packaged Windows native regression
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:LOLPINGAI_DESKTOP_HELPER = (Resolve-Path 'release/win-unpacked/resources/desktop-helper.exe').Path
+          pnpm test:windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tools/windows/check-electron-input.mjs
+      - name: NSIS install, app renderer, restart and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/LOLPingYourAI-Setup-*.exe | Select-Object -First 1
+          ./tools/windows/check-installer.ps1 -Installer $installer.FullName
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: installer-${{ matrix.os }}-node${{ matrix.node }}
+          path: release/LOLPingYourAI-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14

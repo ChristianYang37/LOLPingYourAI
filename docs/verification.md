@@ -1,5 +1,7 @@
 # Verification record — 2026-10-12
 
+Latest Windows evidence (2026-10-16), including real native fixtures, authenticated Codex observe/edit/restore and NSIS installation lifecycle, is recorded in [Windows verification](windows.md). Older platform statements below describe their dated builds.
+
 The macOS + Codex desktop-control loop was exercised with a real model and an isolated editable Test Board. This is a local demo, not a claim that every platform and manual acceptance case has passed.
 
 ## Teammate UX and DSH preview — 2026-10-15

@@ -60,7 +60,7 @@ The teammate is your existing Codex, Claude or DSH harness, with its own model, 
 - Reasoning defaults to **0**, the model's lowest supported level. **1** chooses the next level; larger indices clamp to the model's maximum. The effective level is displayed after a turn starts. DSH defaults to thinking on: its indices count enabled levels, with a separate off switch.
 - **DeepSeek Harness (DSH)** is available through ACP. See [installation, free text API setup and verification limits](docs/dsh.md).
 
-These changes are included in the v0.1.1 macOS release linked below.
+The chat-first interface is included in v0.1.2 for Windows. The older v0.1.1 macOS installer predates the chat-first integration.
 
 ## Signals
 
@@ -103,7 +103,7 @@ The native helper inherited from lolPing handles press, drag, release and cancel
 
 ## Quick start (macOS)
 
-The chat-first interface and review fixes described above are in the current source. Existing v0.1.1 release installers predate this integration; build from source to try these changes until a new release is published.
+The macOS v0.1.1 installer predates the chat-first integration; build from current source for those changes on macOS.
 
 1. **Install.** Download **LOLPingYourAI-0.1.1-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.1) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
 2. **Connect a teammate.** Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) (`codex login`). The CLI bundled with the Codex desktop app is found automatically. Claude is experimental (see [Platform status](#platform-status)).
@@ -128,6 +128,12 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
 
 </details>
 
+## Quick start (Windows x64)
+
+Download **LOLPingYourAI-Setup-0.1.2.exe** from [v0.1.2](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.2). Install per user, connect a locally signed-in Codex CLI, and check the trigger key in Settings. Quit other lolPing/LOLPingYourAI instances first. The installer is unsigned.
+
+The app discovers the Windows Codex desktop executable and standard npm installations. If needed, set `LOLPINGAI_CODEX` to the absolute `codex.exe` path before launching. Emergency stop is **Ctrl+Alt+Esc**. See [Windows build, tests and limitations](docs/windows.md).
+
 ## Platform status
 
 | Combination | Status |
@@ -135,7 +141,7 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
 | macOS Apple Silicon + **Codex** | ✅ Real desktop loop tested with a live model (explain, edit, interrupt, restore, maximize, ward). DMG available. |
 | macOS + **Claude** | 🧪 Experimental Agent SDK with read-only context tools. Protocol-tested; authenticated desktop verification is still pending. |
 | macOS + **DSH** | 🧪 Real Bailian screenshot/edit/restore run on the preceding installed helper; current source has protocol and regression coverage. [Setup and limits](docs/dsh.md). |
-| Windows + Codex / Claude / DSH | 🛠️ Adapters, Win32 helper and installer scripts included. Not validated on a Windows machine yet. |
+| Windows x64 | Native window/input regressions and packaged app startup/restart tested on Windows 10; Windows 2022/2025 CI and NSIS lifecycle checks. Harness and hardware-specific limits are recorded in [Windows verification](docs/windows.md). |
 
 What was actually exercised, and what wasn't, is recorded in [docs/verification.md](docs/verification.md).
 
@@ -171,7 +177,7 @@ The bundled ping textures, sounds and 44 animated emotes are the League of Legen
 
 ## Develop
 
-Requirements: Node 22+, pnpm 10 and Xcode command-line tools on macOS. On Windows: Visual Studio C++ build tools and the .NET Framework C# compiler.
+Requirements: Node 22+, pnpm 10 and Xcode command-line tools on macOS. On Windows: Visual Studio 2022 or later C++ build tools (C++20) and the .NET Framework C# compiler.
 
 ```sh
 git clone https://github.com/ChristianYang37/LOLPingYourAI.git

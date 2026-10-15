@@ -8,7 +8,7 @@ const usage = `Usage: lolpingai <command> [json | --file payload.json]
   doctor   Desktop permissions and harness availability
   status   Configuration, sessions, wards and recent teammate events
   ping     Send a ping:        '{"signal":"missing","point":{"x":640,"y":400}}'
-  config   Change settings:    '{"regionSize":512,"sessionHours":2,"wardHours":0.5}'
+  config   Change settings:    '{"regionSize":512,"wardHours":0.5}'
   bind     Hand off a task:    '{"harness":"codex","summary":"Goal, progress, next step"}'
   stop     Interrupt the teammate and return control
 

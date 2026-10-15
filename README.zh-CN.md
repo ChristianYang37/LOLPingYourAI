@@ -60,7 +60,7 @@
 - 思考强度默认 **0**，即当前模型最低档；**1** 是第二低档，超出范围取最高档。启动一轮后显示实际生效值。DSH 默认开启思考，数字只计算开启档，关闭思考使用独立开关。
 - 新增 **DeepSeek Harness（DSH）ACP** 适配，详见[安装、免费 API 配置与验证范围](docs/dsh.md#中文)。
 
-以上改动已包含在下方的 v0.1.1 macOS 发布包中。
+聊天首页已包含在 v0.1.2 Windows 版中；旧版 v0.1.1 macOS 安装包早于聊天首页的整合。
 
 ## 信号
 
@@ -103,7 +103,7 @@ sequenceDiagram
 
 ## 快速开始（macOS）
 
-上述聊天主页与审核修复已进入当前源码；已有 v0.1.1 安装包早于本次整合。新版本发布前，请从源码构建体验这些变化。
+已有 v0.1.1 macOS 安装包早于聊天首页整合；macOS 用户可从当前源码构建体验这些变化。
 
 1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.1) 下载 **LOLPingYourAI-0.1.1-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
 2. **连接队友**：安装 [Codex CLI](https://developers.openai.com/codex/cli/) 并执行 `codex login`；Codex 桌面应用自带的 CLI 会被自动找到。Claude 目前为实验性支持（见[平台状态](#平台状态)）。
@@ -128,6 +128,12 @@ sequenceDiagram
 
 </details>
 
+## 快速开始（Windows x64）
+
+在 [v0.1.2 发布页](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.2) 下载 **LOLPingYourAI-Setup-0.1.2.exe**，按用户安装，连接本机已登录的 Codex CLI，并在设置页确认触发键。启动前退出其他 lolPing/LOLPingYourAI 实例。当前安装包未签名。
+
+支持查找 Windows Codex 桌面应用内置程序和标准 npm 安装；必要时在启动前将 `LOLPINGAI_CODEX` 设为 `codex.exe` 的绝对路径。紧急停止键为 **Ctrl+Alt+Esc**。构建、测试和验证边界见 [Windows 说明](docs/windows.md)。
+
 ## 平台状态
 
 | 组合 | 状态 |
@@ -135,7 +141,7 @@ sequenceDiagram
 | macOS Apple Silicon＋**Codex** | ✅ 已用真实模型跑通桌面闭环（解释、编辑、中断、恢复、最大化、插眼），提供 DMG |
 | macOS＋**Claude** | 🧪 Agent SDK 适配器，带只读上下文工具；协议测试通过，尚待登录后的桌面实测 |
 | macOS＋**DSH** | 🧪 前一安装版已完成百炼截图、编辑和恢复实测；当前源码已验证协议与回归。[安装与验证范围](docs/dsh.md#中文) |
-| Windows＋Codex／Claude／DSH | 🛠️ 已包含适配器、Win32 助手和安装脚本；尚未在 Windows 实机验证 |
+| Windows x64 | 已在 Windows 10 验证原生窗口/输入回归及打包应用启动、重启；新增 Windows 2022/2025 CI 与 NSIS 安装生命周期检查。各 harness 和硬件验证边界见 [Windows 实测说明](docs/windows.md)。 |
 
 哪些真正测过、哪些没有，都记录在 [docs/verification.md](docs/verification.md)。
 
@@ -171,7 +177,7 @@ node ai/cli.mjs stop
 
 ## 开发
 
-需要 Node 22+、pnpm 10；macOS 需要 Xcode 命令行工具，Windows 需要 Visual Studio C++ 构建工具和 .NET Framework C# 编译器。
+需要 Node 22+、pnpm 10；macOS 需要 Xcode 命令行工具，Windows 需要 Visual Studio 2022 或更新版本的 C++ 构建工具（C++20）和 .NET Framework C# 编译器。
 
 ```sh
 git clone https://github.com/ChristianYang37/LOLPingYourAI.git

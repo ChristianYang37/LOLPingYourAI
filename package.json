@@ -1,7 +1,7 @@
 {
   "name": "lolpingyourai",
   "productName": "LOLPingYourAI",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Ping your AI teammate anywhere on your desktop",
   "author": "LOLPingYourAI contributors",
@@ -20,7 +20,9 @@
     "test:ai": "node --test ai/test/*.test.mjs",
     "test:acceptance": "node --test tools/acceptance/test/*.test.mjs",
     "acceptance": "node tools/acceptance/run.mjs",
-    "build:desktop": "node native/desktop/build.mjs"
+    "build:desktop": "node native/desktop/build.mjs",
+    "test:windows": "node tools/windows/check-native.mjs",
+    "test:packaged": "node tools/windows/check-app.mjs"
   },
   "devDependencies": {
     "@fluentui/react-components": "9.74.9",

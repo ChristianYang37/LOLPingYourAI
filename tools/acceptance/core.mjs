@@ -73,7 +73,7 @@ export async function readBoard(path = boardFile(), instance) {
   return board;
 }
 export function boardTarget(board) {
-  return { id: board.windowId, pid: board.pid, bounds: board.bounds, relative: { x: .5, y: .5 } };
+  return { id: board.windowId, pid: board.pid, ...(board.processStartedAt ? { processStartedAt: board.processStartedAt } : {}), ...(board.windowToken ? { windowToken: board.windowToken } : {}), bounds: board.bounds, relative: { x: .5, y: .5 } };
 }
 const matchesBoard = (target, board) => target?.id === board.windowId && target?.pid === board.pid;
 
