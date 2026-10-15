@@ -168,7 +168,7 @@ test('watch keeps duplicate events at the same timestamp instead of dropping the
 });
 test('Test Board publishes fresh native identity, values and bounds without enabling AX', async () => {
   const source = await readFile(new URL('../../test-board.cjs', import.meta.url), 'utf8');
-  let win, heartbeat, written, callback;
+  let win, heartbeat, written, staged, callback, locked = false;
   const ipcMain = new EventEmitter(), app = new EventEmitter();
   Object.assign(app, { setName() {}, getPath: () => tmpdir(), whenReady: () => ({ then: fn => { callback = fn; } }), quit() {} });
   class BrowserWindow extends EventEmitter {
@@ -179,11 +179,17 @@ test('Test Board publishes fresh native identity, values and bounds without enab
     loadURL() {}
   }
   const require = createRequire(import.meta.url);
-  vm.runInNewContext(source, { require: name => name === 'electron' ? { app, BrowserWindow, ipcMain } : name === 'node:fs' ? { writeFileSync: (_path, value) => { written = JSON.parse(value); }, renameSync() {} } : require(name), process: { pid: process.pid, env: {} }, setInterval: fn => { heartbeat = fn; return 1; }, clearInterval() {} });
+  vm.runInNewContext(source, { require: name => name === 'electron' ? { app, BrowserWindow, ipcMain } : name === 'node:fs' ? {
+    writeFileSync: (_path, value) => { staged = JSON.parse(value); },
+    renameSync() { if (locked) throw Object.assign(new Error('fixture file locked'), { code: 'EPERM' }); written = staged; },
+  } : require(name), process: Object.assign(new EventEmitter(), { pid: process.pid, env: {} }), setInterval: fn => { heartbeat = fn; return 1; }, clearInterval() {} });
   callback(); heartbeat(); assert.equal(written.windowId, '42'); assert.equal(written.pid, process.pid);
   validateBoard(written);
   ipcMain.emit('board:value', { sender: {} }, 'wrong sender'); assert.equal(written.value, 'Ready for a ping.');
   ipcMain.emit('board:value', { sender: win.webContents }, 'Ping received'); assert.equal(written.value, 'Ping received');
   win.bounds.x = 100; heartbeat(); assert.equal(written.bounds.x, 100);
+  locked = true; ipcMain.emit('board:value', { sender: win.webContents }, 'Latest actual note');
+  assert.equal(written.value, 'Ping received');
+  locked = false; heartbeat(); assert.equal(written.value, 'Latest actual note');
   assert.ok(!source.includes('setAccessibilitySupportEnabled'));
 });
