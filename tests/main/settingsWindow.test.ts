@@ -40,7 +40,7 @@ vi.mock('electron', async () => {
 
 vi.mock('../../src/main/paths', () => ({
   IS_MAC: false,
-  assetPath: () => 'icon.png',
+  buildResourcePath: () => 'icon.png',
   loadPage: () => Promise.resolve(),
   pageUrl: () => 'lolping://app/settings/index.html',
   preloadPath: () => 'preload.js',

@@ -124,3 +124,16 @@ Problems found:
 5. A reaction sent right after a Claude turn's last result was acknowledged but never delivered. The input stream had already ended, but `steer()` still queued the reaction until Claude Code exited, up to about a second later. The tester's third emote hit this window, and a script reproduced it against the real SDK. The record is now closed as soon as the input ends, so such a reaction waits for the exit and starts the next turn. With the fix, the script's late reaction got its own turn; a test covers it, and the AI bridge tests (32) pass.
 
 Not covered: the ward's observation visit at the due time and its survival across a restart (step 6); importing or cropping an emote, binding a custom reaction and generating an emote (step 7: no candidate, imported emote or generation session exists from this run); multiple physical monitors (only the built-in display was connected); and Windows. Automation could not hold Option across a drag, because its synthetic mouse events carry their own modifier flags and the hook checks every event, so the wheel pings above were made by hand.
+## macOS window identity regression — 2026-10-15
+
+- Exact CG window ID to AX identity replaces the rectangle-only match. Focus, hit-test and observed-bounds checks reject stale or ambiguous input; process launch markers remain attached to window identities.
+- Live Electron suite: 10/10 cases. Chrome: 30 alternating edits between identical overlapping windows. Safari: 10 alternating edits on the final helper. Both browsers passed stale/fresh movement, modal-input rejection with no deferred text after dismissal, original-text restoration and closed-window rejection. Some attempted runs safely stopped on focus changes; no zero-refusal or universal app-compatibility claim is made.
+- Independent PR checkout: 34 AI tests; 709 Vitest passes and one skip (seven helper cases passed after their missing build prerequisite was compiled); typecheck, native builds, production build, Apple Silicon DMG packaging and strict deep signature verification passed. No new SHA-256 check. The installed app was not replaced.
+- See [window identity design and test evidence](window-identity.md) for reproduction, discovered browser issues, private-SPI dependency, conservative refusals and untested boundaries.
+
+
+## Owner-supplied logo — 2026-10-15
+
+- Preserved the supplied 1254×1254 PNG as `build/icon.png`; both language READMEs display it. Generated Windows ICO frames at 16, 24, 32, 48, 64, 128 and 256 pixels and decoded every frame successfully.
+- Packaged the same logo for the settings/window icon on both platforms; Windows tray branding uses it too. macOS retains the existing monochrome menu-bar status glyphs. Updated artwork attribution.
+- Typecheck, 26 existing window/tray tests and production build passed after the change. Rebuilt the Apple Silicon DMG, passed strict deep signature verification, and visually inspected the icon extracted from the final app's ICNS. The installed app was not replaced.
