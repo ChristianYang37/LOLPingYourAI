@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { Teammate } from '../service.mjs';
 import { validateSvg } from '../icons.mjs';
 
@@ -166,4 +169,37 @@ test('ACP permissions select only an offered one-time option and retain unsuppor
   await service.approve({ harness: 'codex', id: 8, allow: true });
   assert.deepEqual(answers[1].result, { outcome: { outcome: 'selected', optionId: 'once' } });
   assert.equal(service.approvals.length, 0);
+});
+
+test('the first prompt and steering ask for Simplified Chinese replies', async () => {
+  const { service, adapter } = await fixture();
+  await service.dispatch({ signal: 'missing', point: { x: 60, y: 70 } });
+  assert.match(adapter.sent.at(-1).prompt, /Write every user-facing reply, including reply_ping captions, in Simplified Chinese/);
+  await service.dispatch({ signal: 'bait', point: { x: 60, y: 70 } });
+  assert.equal(adapter.sent.at(-1).steer, true);
+  assert.match(adapter.sent.at(-1).prompt, /Write your visible reply in Simplified Chinese/);
+});
+
+test('a finished reply is archived to the configured directory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'lolping-replies-'));
+  process.env.LOLPINGAI_REPLY_DIR = root;
+  try {
+    const { service, adapter } = await fixture();
+    const ping = await service.dispatch({ signal: 'missing', point: { x: 60, y: 70 } });
+    adapter.emit('event', { method: 'item/completed', params: { threadId: ping.session, item: { type: 'agentMessage', text: '这是中文回复。' } } });
+    let files = [];
+    for (let i = 0; i < 200 && !files.length; i++) { await new Promise(resolve => setTimeout(resolve, 10)); files = await readdir(root); }
+    assert.equal(files.length, 1);
+    assert.match(files[0], /^[0-9]{8}-[0-9]{6}-missing\.txt$/);
+    const body = await readFile(join(root, files[0]), 'utf8');
+    assert.match(body, /Signal: missing \(observe\)/);
+    assert.match(body, /Target: window \(pid 2\)/);
+    assert.match(body, /这是中文回复。/);
+    adapter.emit('event', { method: 'item/completed', params: { threadId: ping.session, item: { type: 'agentMessage', text: '   ' } } });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal((await readdir(root)).length, 1);
+  } finally {
+    delete process.env.LOLPINGAI_REPLY_DIR;
+    await rm(root, { recursive: true, force: true });
+  }
 });

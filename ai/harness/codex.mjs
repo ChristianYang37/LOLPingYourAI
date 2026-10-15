@@ -8,7 +8,8 @@ export class CodexAdapter extends EventEmitter {
   // Every caller waits for the same initialization; requests sent before `initialized` would be rejected.
   connect() { return this.ready ??= this.start().catch(error => { this.ready = null; throw error; }); }
   async start() {
-    const args = ['app-server', '--listen', 'stdio://', '-c', 'mcp_servers.lolpingyourai.default_tools_approval_mode="approve"'];
+    // node_repl has no role in this teammate; leaving it visible made every ping stall on an approval prompt.
+    const args = ['app-server', '--listen', 'stdio://', '-c', 'mcp_servers.lolpingyourai.default_tools_approval_mode="approve"', '-c', 'mcp_servers.node_repl.enabled=false'];
     const entries = { command: this.mcp.command, args: this.mcp.args, env_vars: Object.keys(this.mcp.env) };
     for (const [key, value] of Object.entries(entries)) {
       if (key === 'env') { for (const [k, v] of Object.entries(value)) args.push('-c', `mcp_servers.lolpingyourai.env.${k}=${JSON.stringify(v)}`); }
