@@ -55,9 +55,9 @@ test('real loopback transport rejects HTTP errors and has a finite timeout', asy
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   t.after(() => { server.closeAllConnections(); server.close(); });
   await writeFile(join(dir, 'bridge.json'), JSON.stringify({ endpoint: `http://127.0.0.1:${server.address().port}`, token: 'fixture' }));
-  const b = new Bridge(dir, { timeoutMs: 100 });
+  const b = new Bridge(dir, { timeoutMs: 3000 });
   await assert.rejects(b.call('status'), e => e instanceof BridgeError && e.status === 401);
-  await assert.rejects(b.call('slow'), e => e instanceof BridgeUnavailable && e.cause?.name === 'TimeoutError');
+  await assert.rejects(b.call('slow', {}, 100), e => e instanceof BridgeUnavailable && e.cause?.name === 'TimeoutError');
 });
 test('timeout never becomes a successful acceptance result', async () => {
   await assert.rejects(poll(async () => ({}), () => false, { ...fakeClock(), timeoutMs: 5 }), /timed out/);

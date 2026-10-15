@@ -6,7 +6,6 @@ import { SettingsStore } from '../../src/main/settingsStore';
 import { DEFAULT_SETTINGS, type Settings } from '../../src/shared/settings';
 
 const tempDir = () => mkdtempSync(join(tmpdir(), 'lolping-'));
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Waits for the save load() scheduled on its own to reach disk: a fixed sleep raced slow CI runners. */
 const savedTagColor = (dir: string, color: number) =>
   vi.waitFor(() => expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')).tagColor).toBe(color), { timeout: 3000 });
@@ -123,14 +122,21 @@ describe('SettingsStore', () => {
   it('debounces writes and keeps the last value', async () => {
     const dir = tempDir();
     const store = new SettingsStore(dir, 60);
-    store.load();
-    store.update({ volume: 10 });
-    store.update({ volume: 20 });
-    // Well inside the debounce window: an immediate (or ignored-debounce) write would have landed by now.
-    await sleep(25);
-    expect(existsSync(join(dir, 'settings.json'))).toBe(false);
-    await sleep(150);
-    expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')).volume).toBe(20);
+    const flush = vi.spyOn(store, 'flush');
+    vi.useFakeTimers();
+    try {
+      store.load(); store.update({ volume: 10 });
+      await vi.advanceTimersByTimeAsync(25);
+      store.update({ volume: 20 });
+      await vi.advanceTimersByTimeAsync(59);
+      expect(flush).not.toHaveBeenCalled();
+      expect(existsSync(join(dir, 'settings.json'))).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(flush).toHaveBeenCalledTimes(1);
+      // The timer contract is deterministic; actual filesystem delivery is asynchronous.
+      vi.useRealTimers();
+      await vi.waitFor(() => expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')).volume).toBe(20), { timeout: 3000 });
+    } finally { vi.useRealTimers(); }
   });
 
   it('still falls back to defaults when the corrupt file cannot be backed up', () => {
