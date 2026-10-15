@@ -117,6 +117,7 @@ class Decision {
   bool startsGesture(WheelKind k, Btn btn) const;
   void markSwallow();
   void cancelGesture(Result& r);
+  bool flushHeldBack(uint32_t vk, Result& r);
   void onKeyDown(const InputEvent& e, Result& r);
   void onKeyUp(const InputEvent& e, Result& r);
   void onMouseDown(const InputEvent& e, Result& r);
@@ -136,6 +137,13 @@ class Decision {
   // that chord belongs to another program, so clicks pass through until every trigger is released.
   bool foreignKey_ = false;
   bool maskMenuKeys_ = true;
+  // Tap-through, so a custom trigger key still types: a lone tap is replayed on release, and a key pressed while
+  // it is held flushes it first. State (custom-key triggers only, 0 = none):
+  // heldBackVk_: the trigger key is down but not sent yet; a drag consumes it, a lone release types it.
+  // typedVk_: the held-back key was flushed because another key was pressed (the user is typing):
+  // its repeats and its real key-up now pass through to the OS.
+  uint32_t heldBackVk_ = 0;
+  uint32_t typedVk_ = 0;
   WheelKind owner_ = WheelKind::Ping;  // the wheel the current gesture belongs to
   Btn dragBtn_ = Btn::None;
   int px_ = 0;

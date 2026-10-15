@@ -1,6 +1,7 @@
 import { DEFAULT_CLICK_EMOTE, EMOTE_CATALOG } from '../../shared/emoteCatalog';
 import {
-  allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteIconUrl, emoteSoundUrl, isBundledEmote,
+  CUSTOM_EMOTE_URL, allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customSoundUrl, customStillUrl, emoteIconUrl, emoteSoundUrl,
+  isBundledEmote,
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
 import {
@@ -48,17 +49,21 @@ function emoteItem(ref: EmoteRef): WheelItem {
   return { key: ref, icon: textureUrl('generic_ping') };
 }
 
-/** This machine's own emotes: the settings know what an imported one looks like, and whether it moves. */
+/** This machine's own emotes: the settings know what an imported one looks like, whether it moves and has a sound. */
 function localArt(ref: EmoteRef): EmoteArt {
   if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
   const custom = settings.customEmotes.find((c) => c.id === ref);
   if (!custom) return { kind: 'placeholder' };
   const hash = customHash(ref);
-  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated };
+  const sound = custom.sound ? { sound: customSoundUrl(hash) } : {};
+  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated, ...sound };
 }
 
 function applySettings(s: OverlaySettings): void {
   settings = s;
+  sounds.forget(CUSTOM_EMOTE_URL);
+  pingWheel.setSize(s.wheelSizePx);
+  emoteWheel.setSize(s.wheelSizePx);
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
   emoteWheel.setItems(s.emoteWheel.map(emoteItem));
 }
@@ -74,7 +79,9 @@ async function ping(def: PingDef, x: number, y: number, tag?: PingTag, durationS
 async function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag, durationS?: number): Promise<void> {
   await Promise.all([
     stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, durationS, tag }),
-    art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound && settings.emoteSound ? sounds.play(`emote:${art.slug}`, volume()) : Promise.resolve(),
+    !settings.emoteSound ? Promise.resolve()
+      : art.kind === 'custom' && art.sound ? sounds.playUrl(art.sound, volume())
+      : art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound ? sounds.play(`emote:${art.slug}`, volume()) : Promise.resolve(),
   ]);
 }
 

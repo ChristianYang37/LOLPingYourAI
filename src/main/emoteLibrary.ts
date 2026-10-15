@@ -1,14 +1,18 @@
 import { createHash } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { AUDIO_TYPES, sniffAudio } from '../shared/audioSniff';
 import {
-  ANIM_MAX_BYTES, ANIM_MAX_SIDE, CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, STILL_MAX_BYTES, STILL_SIDE, customAnimUrl, customHash,
-  customStillUrl, isBundledEmote, isCustomRef, type CustomEmote, type EmoteArt, type EmoteFile, type EmoteRef, type ImportError,
+  ANIM_MAX_BYTES, ANIM_MAX_SIDE, CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, SOUND_MAX_BYTES, STILL_MAX_BYTES, STILL_SIDE, customAnimUrl,
+  customHash, customSoundUrl, customStillUrl, isBundledEmote, isCustomRef, type CustomEmote, type EmoteArt, type EmoteFile,
+  type EmoteRef, type ImportError, type SoundError,
 } from '../shared/emotes';
 import { gifExtent, isAnimatedWebp, sniffImage, webpSize } from '../shared/imageSniff';
 import { sanitizeName } from '../shared/roomProtocol';
 import { isFile } from './fileState';
 import { renameWithRetry } from './settingsStore';
+
+const soundNames = (hash: string): string[] => AUDIO_TYPES.map((t) => `${hash}.sound.${t}`);
 
 export type SaveResult = { ok: true; emote: CustomEmote } | { ok: false; error: ImportError };
 
@@ -42,6 +46,11 @@ function checkAnim(b: Uint8Array): ImportError | null {
   return longest(size) > ANIM_MAX_SIDE ? 'animSize' : null;
 }
 
+export function checkSound(b: Uint8Array): SoundError | null {
+  if (!sniffAudio(b)) return 'type';
+  return b.length > SOUND_MAX_BYTES ? 'size' : null;
+}
+
 /** What an emote looks like on screen. A room member's imported emote shows as its still, and only when it is one of ours too. */
 export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], remote: boolean): EmoteArt {
   if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
@@ -49,11 +58,13 @@ export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], r
   if (!emote) return { kind: 'placeholder' };
   const hash = customHash(ref);
   const animated = emote.animated && !remote;
-  return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated };
+  const sound = emote.sound && !remote ? { sound: customSoundUrl(hash) } : {};
+  return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated, ...sound };
 }
 
 /**
- * Imported emotes on disk: `<hash>.webp` (the still) and `<hash>.anim.gif|webp` (the original animation) in `dir`.
+ * Imported emotes on disk: `<hash>.webp` (the still), `<hash>.anim.gif|webp` (the original animation) and
+ * `<hash>.sound.ogg|mp3|wav` in `dir`.
  * Everything that arrives is checked again here, whatever the settings window already checked, and the id is computed here.
  */
 export class EmoteLibrary {
@@ -85,11 +96,32 @@ export class EmoteLibrary {
     return { ok: true, emote: { id, name, animated: f.anim !== undefined } };
   }
 
+  /** Saves `sound` as the emote's sound, replacing any it had, or deletes its sound when `sound` is null. */
+  async setSound(id: EmoteRef, sound: Uint8Array | null): Promise<SoundError | null> {
+    if (!isCustomRef(id)) return 'type';
+    const hash = customHash(id);
+    const all = soundNames(hash);
+    try {
+      if (sound === null) {
+        for (const n of all) await rm(join(this.dir, n), { force: true });
+        return null;
+      }
+      const error = checkSound(sound);
+      if (error) return error;
+      const name = `${hash}.sound.${sniffAudio(sound)}`;
+      await this.write([{ name, data: sound }], all.filter((n) => n !== name)); // a sound in another format would be served first
+      return null;
+    } catch (err) {
+      console.warn('[emotes] could not save a sound:', (err as Error).message);
+      return 'disk';
+    }
+  }
+
   /** Deletes an emote's files. Best effort: a file that can't be deleted is only an orphan, which a later import overwrites. */
   async remove(id: EmoteRef): Promise<void> {
     if (!isCustomRef(id)) return;
     const hash = customHash(id);
-    await Promise.all([`${hash}.webp`, `${hash}.anim.gif`, `${hash}.anim.webp`].map((n) =>
+    await Promise.all([`${hash}.webp`, `${hash}.anim.gif`, `${hash}.anim.webp`, ...soundNames(hash)].map((n) =>
       rm(join(this.dir, n), { force: true }).catch((err: Error) => console.warn('[emotes] could not delete', n, err.message))));
   }
 

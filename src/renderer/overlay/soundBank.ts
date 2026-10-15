@@ -24,6 +24,17 @@ export class SoundBank {
     return results.filter((r): r is string => r !== null);
   }
 
+  /** Plays the sound at `url`, loading it under that key the first time. A file that won't load plays nothing. */
+  async playUrl(url: string, volume01: number): Promise<void> {
+    if (!this.buffers.has(url)) await this.load([{ key: url, url }]);
+    await this.play(url, volume01);
+  }
+
+  /** Drops the loaded sounds whose key starts with `prefix`, so the next play loads them again. */
+  forget(prefix: string): void {
+    for (const key of this.buffers.keys()) if (key.startsWith(prefix)) this.buffers.delete(key);
+  }
+
   async play(key: string, volume01: number): Promise<void> {
     const buffer = this.buffers.get(key);
     if (!buffer || volume01 <= 0 || this.voices >= MAX_VOICES) return;

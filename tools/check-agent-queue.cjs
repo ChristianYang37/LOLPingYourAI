@@ -12,7 +12,7 @@ fs.unlinkSync(out);
 registerAppScheme();
 app.whenReady().then(async () => {
   serveAppScheme({ rendererRoot: path.resolve('out/renderer'), emoteDirs: () => [], assetDirs: () => [path.resolve('out/renderer')] });
-  const settings = overlaySettings({ ...DEFAULT_SETTINGS, pingDurationS: .1, volume: 15 });
+  const settings = overlaySettings({ ...DEFAULT_SETTINGS, pingDurationS: .1, agentPingDurationS: 3, volume: 15 });
   const manager = new OverlayManager(settings, slug => ({ kind: 'bundled', slug }));
   const watchdog = setTimeout(() => { console.error('Queue smoke test timed out'); manager.destroy(); app.exit(1); }, 30000);
   try {

@@ -1,11 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { windows } = vi.hoisted(() => ({ windows: [] as unknown[] }));
+const h = vi.hoisted(() => ({ windows: [] as unknown[], isMac: false }));
+const { windows } = h;
 
 vi.mock('electron', async () => {
   const { EventEmitter: Emitter } = await import('node:events');
   class FakeContents extends Emitter {
+    insertCSS = vi.fn(async () => 'fill');
+    removeInsertedCSS = vi.fn(async () => undefined);
     openHandler: ((details: { url: string }) => { action: string }) | null = null;
     setWindowOpenHandler(handler: (details: { url: string }) => { action: string }): void {
       this.openHandler = handler;
@@ -14,6 +17,8 @@ vi.mock('electron', async () => {
   class FakeWindow extends Emitter {
     webContents = new FakeContents();
     destroyed = false;
+    minimized = false;
+    setVibrancy = vi.fn();
     constructor() {
       super();
       windows.push(this);
@@ -24,9 +29,9 @@ vi.mock('electron', async () => {
       return this.destroyed;
     }
     isMinimized(): boolean {
-      return false;
+      return this.minimized;
     }
-    restore(): void {}
+    restore(): void { this.minimized = false; this.emit('restore'); }
     show(): void {}
     focus(): void {}
     close(): void {
@@ -35,11 +40,11 @@ vi.mock('electron', async () => {
     }
   }
   const nativeTheme = Object.assign(new Emitter(), { shouldUseDarkColors: false });
-  return { BrowserWindow: FakeWindow, nativeImage: { createFromPath: () => ({}) }, nativeTheme };
+  return { app: { dock: { show: vi.fn(), hide: vi.fn() }, focus: vi.fn() }, BrowserWindow: FakeWindow, nativeImage: { createFromPath: () => ({}) }, nativeTheme };
 });
 
 vi.mock('../../src/main/paths', () => ({
-  IS_MAC: false,
+  get IS_MAC() { return h.isMac; },
   buildResourcePath: () => 'icon.png',
   loadPage: () => Promise.resolve(),
   pageUrl: () => 'lolping://app/settings/index.html',
@@ -53,6 +58,7 @@ let mod: Mod;
 
 beforeEach(async () => {
   windows.length = 0;
+  h.isMac = false;
   vi.resetModules();
   mod = await import('../../src/main/settingsWindow');
 });
@@ -131,5 +137,35 @@ describe('navigation', () => {
     (windows[1] as FakeWindow).webContents.emit('will-navigate', event, event.url);
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
     expect((windows[1] as FakeWindow).webContents.openHandler).not.toBeNull();
+  });
+});
+
+describe('macOS Dock recovery', () => {
+  const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+  type MacWindow = FakeWindow & {
+    minimized: boolean; restore(): void; setVibrancy: ReturnType<typeof vi.fn>;
+    webContents: FakeContents & { insertCSS: ReturnType<typeof vi.fn>; removeInsertedCSS: ReturnType<typeof vi.fn> };
+  };
+  it('restores the settings sidebar fill and vibrancy through the native Dock path', async () => {
+    h.isMac = true;
+    mod.openSettingsWindow();
+    const w = windows[0] as MacWindow;
+    w.minimized = true; w.emit('minimize'); await flush();
+    expect(w.webContents.insertCSS).toHaveBeenCalledWith(expect.stringContaining('.settings-side'));
+    w.restore();
+    expect(w.webContents.removeInsertedCSS).toHaveBeenCalledWith('fill');
+    expect(w.setVibrancy.mock.calls).toEqual([[null], ['sidebar']]);
+  });
+  it('removes a fill that finishes inserting after restore and does not leak it into the next window', async () => {
+    h.isMac = true;
+    mod.openSettingsWindow();
+    const w = windows[0] as MacWindow;
+    let complete!: (key: string) => void;
+    w.webContents.insertCSS.mockImplementationOnce(() => new Promise<string>(resolve => { complete = resolve; }));
+    w.minimized = true; w.emit('minimize');
+    mod.openSettingsWindow(); complete('late'); await flush();
+    expect(w.webContents.removeInsertedCSS).toHaveBeenCalledWith('late');
+    w.close(); mod.openSettingsWindow();
+    expect((windows[1] as MacWindow).webContents.removeInsertedCSS).not.toHaveBeenCalled();
   });
 });

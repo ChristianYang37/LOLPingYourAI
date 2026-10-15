@@ -1,5 +1,6 @@
 import { net, protocol } from 'electron';
 import { pathToFileURL } from 'node:url';
+import { AUDIO_TYPES } from '../shared/audioSniff';
 import { isFile } from './fileState';
 import { resolveInside } from './safePath';
 
@@ -9,8 +10,8 @@ import { resolveInside } from './safePath';
  */
 export const APP_SCHEME = 'lolping';
 
-/** The only names lolping://emotes serves: a hash and `.webp` (the still) or `.anim` (the animation). */
-export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim)$/;
+/** The only names lolping://emotes serves: a hash and `.webp` (the still), `.anim` (the animation) or `.sound`. */
+export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim|sound)$/;
 
 /** Must run before app 'ready'. */
 export function registerAppScheme(): void {
@@ -21,13 +22,15 @@ export function registerAppScheme(): void {
 
 /**
  * The file behind a lolping://emotes path, from the first of `dirs` that has it. `.anim` is the `.anim.gif` or `.anim.webp`
- * on disk, or the still when the animation is missing. Null for any other path.
+ * on disk, or the still when the animation is missing; `.sound` is the `.sound.ogg`, `.mp3` or `.wav`. Null for any other path.
  */
 export function resolveEmoteFile(dirs: readonly string[], urlPath: string): string | null {
   const m = EMOTE_URL_RE.exec(urlPath);
   if (!m) return null;
   const [, hash, kind] = m;
-  const names = kind === 'webp' ? [`${hash}.webp`] : [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`];
+  const names = kind === 'webp' ? [`${hash}.webp`]
+    : kind === 'anim' ? [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`]
+      : AUDIO_TYPES.map((t) => `${hash}.sound.${t}`);
   for (const name of names) {
     for (const dir of dirs) {
       const file = resolveInside(dir, `/${name}`);

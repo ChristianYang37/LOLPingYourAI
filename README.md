@@ -62,6 +62,16 @@ The teammate is your existing Codex, Claude or DSH harness, with its own model, 
 
 The chat-first interface is included in v0.1.2 for Windows. The older v0.1.1 macOS installer predates the chat-first integration.
 
+## Wheel and desktop improvements (current source)
+
+- A custom keyboard trigger still types when tapped; holding it while dragging uses it for the wheel. Releasing the trigger still cancels an open wheel.
+- **Settings → Wheel → Wheel size** adjusts both wheels from **300–900 logical pixels** (default 600). This is separate from the 512-pixel AI focus region and ping artwork size.
+- In **Settings → Emotes**, import an image, then use its speaker button to add **MP3 / OGG / WAV**, up to **1 MiB and 5 seconds**. Use the same button to remove the sound; click the tile to preview. Sounds stay on your computer and respect mute and the emote-sound switch.
+- Optional **Upside-down Missing (`¿`)** is in the signal pool; drag it into a slot. It uses the Question instruction, including your Question customization. Enemy Vision now has the same red artwork on the wheel and desktop.
+- Windows overlays leave the last 1 DIP of the display uncovered and refresh their topmost position before new content, including queued agent replies. macOS overlays stay out of Mission Control; replayed clicks retain double/triple-click counts, and settings recover after Dock restore. The current macOS source requires **macOS 13+ on Apple Silicon**.
+
+These changes are not in the existing v0.1.1 Mac / v0.1.2 Windows installers. [Migration provenance and verification](docs/upstream-migration.md).
+
 ## Signals
 
 | | Signal | Your teammate… |

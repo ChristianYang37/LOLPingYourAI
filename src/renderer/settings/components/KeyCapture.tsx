@@ -57,7 +57,9 @@ export function KeyCapture(props: {
     if (!listening) return;
     e.preventDefault();
     e.stopPropagation();
-    const outcome = evaluateKeyDown(e, { requireModifier: props.requireModifier, forbiddenVks: props.forbiddenVks });
+    const outcome = evaluateKeyDown(e, {
+      platform: api.platform, requireModifier: props.requireModifier, forbiddenVks: props.forbiddenVks,
+    });
     switch (outcome.kind) {
       case 'cancel':
         return finish(true);

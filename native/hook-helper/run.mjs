@@ -19,3 +19,4 @@ if (action !== 'build' && action !== 'test') {
 if (win) run('cmd.exe', ['/d', '/c', '.\\build.cmd']);
 else run('sh', ['build.sh']);
 if (action === 'test') run(join(here, 'build', win ? 'helper_tests.exe' : 'helper_tests'), []);
+if (action === 'test' && !win) run(join(here, 'build', 'hooks_mac_tests'), []);

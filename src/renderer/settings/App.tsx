@@ -45,7 +45,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
 ];
 
 /** Pings that aren't in League's default wheel layout get a "new" badge. */
-const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared']);
+const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared', 'missingflip']);
 
 /** The settings change for a ping wheel edit: only the fields it touches, since an undefined field would reset that setting. */
 function pingPatch(p: WheelPatch<PingId>): Partial<Settings> {
@@ -197,6 +197,8 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         </section>
         <section hidden={active !== 'wheel'}>
         <div className="section" id="wheel">{t.navWheel}</div>
+        <SliderRow limit="wheelSizePx" icon={<ResizeLarge24Regular />} title={t.wheelSize} description={t.wheelSizeDesc}
+          value={s.wheelSizePx} format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ wheelSizePx: v })} />
         <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool}
           defaults={{ wheel: DEFAULT_WHEEL, center: DEFAULT_CLICK_PING }}
           labels={{ title: t.wheelTitle, desc: t.wheelDesc(trigger), poolTitle: t.allPings, poolDesc: t.allPingsDesc }}
