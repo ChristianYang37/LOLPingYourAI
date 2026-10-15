@@ -92,3 +92,15 @@ test('context tool policy keeps credentials and whole-home sweeps out of reach',
     ['Read', { file_path: '/Users/me/.aws/credentials' }], ['Grep', { pattern: 'token', path: '/Users/me' }], ['Glob', { pattern: '**/*', path: '/' }],
     ['Grep', { pattern: 'KEY', path: '/Users/me/code/app', glob: '**/.env' }], ['Write', { file_path: '/tmp/x' }], ['Bash', { command: 'ls' }]]) assert.equal(allowed(name, input), false, `${name} ${JSON.stringify(input)}`);
 });
+
+test('retreat cancels a late reaction waiting for Claude process shutdown', async () => {
+  let ended, release;
+  const reached = new Promise(resolve => { ended = resolve; });
+  const sdk = fakeSdk({ exiting: () => { if (sdk.calls.length !== 1) return; ended(); return new Promise(resolve => { release = resolve; }); } });
+  const a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
+  const id = await a.create(); await a.send(id, 'Work'); await reached;
+  const reaction = a.steer(id, 'Late reaction');
+  const refused = assert.rejects(reaction, /cancelled/i);
+  const stopped = a.cancel(id); release(); await stopped; await refused;
+  assert.equal(sdk.calls.length, 1, 'Retreat must not start a second turn');
+});

@@ -22,7 +22,7 @@ export function toolPolicy(name, input = {}, cwd, home = homedir()) {
 }
 
 export class ClaudeAdapter extends EventEmitter {
-  constructor({ cwd, mcp, skillPath, executable, sdk }) { super(); Object.assign(this, { cwd, mcp, skillPath, executable }); this.sdk = sdk; this.active = new Map(); this.known = new Set(); }
+  constructor({ cwd, mcp, skillPath, executable, sdk }) { super(); Object.assign(this, { cwd, mcp, skillPath, executable }); this.sdk = sdk; this.active = new Map(); this.known = new Set(); this.cancelEpoch = new Map(); }
   async load() { return this.sdk ??= await import('@anthropic-ai/claude-agent-sdk'); }
   async capabilities() { await this.load(); return { images: true, steer: 'after-current-turn', interrupt: true, desktop: 'project-mcp', context: contextTools, nativeDesktop: false }; }
   async create() { const id = randomUUID(); return id; }
@@ -82,8 +82,9 @@ export class ClaudeAdapter extends EventEmitter {
     return id;
   }
   // Claude has no mid-turn steering here. Deliver the reaction after the current turn rather than interrupting its work.
-  async steer(id, prompt, image) { const record = this.active.get(id); if (!record || record.closed || image) { await record?.finished; return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
+  async steer(id, prompt, image) { const epoch = this.cancelEpoch.get(id); const record = this.active.get(id); if (!record || record.closed || image) { await record?.finished; if (this.cancelEpoch.get(id) !== epoch) throw new Error('Follow-up cancelled'); return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
   async cancel(id) {
+    this.cancelEpoch.set(id, (this.cancelEpoch.get(id) ?? 0) + 1);
     const record = this.active.get(id); if (!record) return;
     record.cancelled = true; record.followUps.length = 0; record.wake?.(); await record.stream.interrupt();
     await Promise.race([record.finished, new Promise((_, reject) => { const t = setTimeout(() => reject(new Error('Claude has not confirmed cancellation')), 15000); t.unref(); })]);
