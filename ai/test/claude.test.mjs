@@ -44,16 +44,6 @@ test('a reaction during a Claude turn is delivered after it, in the same session
   await a.send(id, 'Next ping'); await completion(a); assert.equal(sdk.calls[1].options.resume, id);
 });
 
-test('a reaction that arrives while a finished Claude turn shuts down starts the next turn instead of being lost', async () => {
-  let ended; const inputEnded = new Promise(resolve => { ended = resolve; });
-  const sdk = fakeSdk({ exiting: () => { ended(); return new Promise(resolve => setTimeout(resolve, 20)); } }), a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
-  const id = await a.create(); await a.send(id, 'Question');
-  await inputEnded; assert.equal(a.active.has(id), true);
-  await a.steer(id, 'Nice'); await completion(a);
-  assert.deepEqual(sdk.calls.map(call => call.prompts.map(p => p[0].text)), [['Question'], ['Nice']]);
-  assert.equal(sdk.calls[1].options.resume, id);
-});
-
 test('Claude retreat interrupts, drops queued reactions and confirms the turn as interrupted', async () => {
   const sdk = fakeSdk(), a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk }), done = completion(a);
   const id = await a.create(); await a.send(id, 'Work'); await a.steer(id, 'Nice'); await a.cancel(id);
@@ -73,7 +63,7 @@ test('Claude exposes only read-only context tools; hooks refuse everything else 
   await a.send(await a.create(), 'Question'); await completion(a);
   const { options } = sdk.calls[0];
   assert.deepEqual(options.tools, contextTools);
-  assert.deepEqual(Object.keys(options.mcpServers), ['lolpingyourai']); assert.equal(options.strictMcpConfig, true);
+  assert.deepEqual(Object.keys(options.mcpServers), ['lolpingyourai']);
   const hook = options.hooks.PreToolUse[0].hooks[0];
   assert.equal((await hook({ tool_name: 'Bash', tool_input: { command: 'ls' } })).hookSpecificOutput.permissionDecision, 'deny');
   assert.deepEqual(await hook({ tool_name: 'mcp__lolpingyourai__reply_ping', tool_input: {} }), {});

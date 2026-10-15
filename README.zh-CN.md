@@ -128,7 +128,7 @@ sequenceDiagram
 | 组合 | 状态 |
 | --- | --- |
 | macOS Apple Silicon＋**Codex** | ✅ 已用真实模型跑通桌面闭环（解释、编辑、中断、恢复、最大化、插眼），提供 DMG |
-| macOS＋**Claude** | 🧪 Agent SDK 适配器，带只读上下文工具；贡献者已报告 macOS 登录实测，见[验证记录](docs/verification.md) |
+| macOS＋**Claude** | 🧪 Agent SDK 适配器，带只读上下文工具；协议测试通过，尚待登录后的桌面实测 |
 | macOS＋**DSH** | 🧪 前一安装版已完成百炼截图、编辑和恢复实测；当前源码已验证协议与回归。[安装与验证范围](docs/dsh.md#中文) |
 | Windows＋Codex／Claude／DSH | 🛠️ 已包含适配器、Win32 助手和安装脚本；尚未在 Windows 实机验证 |
 

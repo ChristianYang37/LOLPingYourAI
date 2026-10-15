@@ -128,7 +128,7 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
 | Combination | Status |
 | --- | --- |
 | macOS Apple Silicon + **Codex** | ✅ Real desktop loop tested with a live model (explain, edit, interrupt, restore, maximize, ward). DMG available. |
-| macOS + **Claude** | 🧪 Experimental Agent SDK with read-only context tools. Contributor-reported signed-in macOS run; see the [verification record](docs/verification.md). |
+| macOS + **Claude** | 🧪 Experimental Agent SDK with read-only context tools. Protocol-tested; authenticated desktop verification is still pending. |
 | macOS + **DSH** | 🧪 Real Bailian screenshot/edit/restore run on the preceding installed helper; current source has protocol and regression coverage. [Setup and limits](docs/dsh.md). |
 | Windows + Codex / Claude / DSH | 🛠️ Adapters, Win32 helper and installer scripts included. Not validated on a Windows machine yet. |
 

@@ -23,7 +23,7 @@ export function toolPolicy(name, input = {}, cwd, home = homedir()) {
 }
 
 export class ClaudeAdapter extends EventEmitter {
-  constructor({ cwd, mcp, skillPath, executable, sdk }) { super(); Object.assign(this, { cwd, mcp, skillPath, executable }); this.sdk = sdk; this.active = new Map(); this.known = new Set(); this.cancelEpoch = new Map(); }
+  constructor({ cwd, mcp, skillPath, executable, sdk }) { super(); Object.assign(this, { cwd, mcp, skillPath, executable }); this.sdk = sdk; this.active = new Map(); this.known = new Set(); }
   async load() { return this.sdk ??= await import('@anthropic-ai/claude-agent-sdk'); }
   async capabilities() { await this.load(); return { images: true, steer: 'after-current-turn', interrupt: true, desktop: 'project-mcp', context: contextTools, nativeDesktop: false }; }
   async create() { const id = randomUUID(); return id; }
@@ -32,7 +32,7 @@ export class ClaudeAdapter extends EventEmitter {
     const { query } = await this.load();
     let release; const held = new Promise(resolve => { release = resolve; });
     async function* input() { await held; }
-    const stream = query({ prompt: input(), options: { cwd: this.cwd, tools: [], mcpServers: {}, strictMcpConfig: true, settings: { fastMode: false }, ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}) } });
+    const stream = query({ prompt: input(), options: { cwd: this.cwd, tools: [], mcpServers: {}, settings: { fastMode: false }, ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}) } });
     try { const models = await stream.supportedModels(); return { models: models.map(m => ({ id: m.value, name: m.displayName, fastMode: Boolean(m.supportsFastMode), efforts: m.supportedEffortLevels ?? [] })), defaultModel: models.find(m => m.value === 'default')?.value ?? models[0]?.value }; }
     finally { release(); stream.close(); }
   }
@@ -47,7 +47,7 @@ export class ClaudeAdapter extends EventEmitter {
     const refuse = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
     this.effectiveEffort = chooseEffort(this.effort, ['low', 'medium', 'high']);
     const options = { effort: this.effectiveEffort, ...(this.selection.model ? { model: this.selection.model } : {}), settings: { fastMode: this.selection.fastMode }, cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
-      strictMcpConfig: true,
+
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       // Hooks run before settings allow-rules, so a user's global allow list cannot widen this teammate's tools.
       hooks: { PreToolUse: [{ hooks: [async input => { const reason = toolPolicy(input.tool_name, input.tool_input ?? {}, this.cwd); return reason ? refuse(reason) : {}; }] }] },
@@ -114,9 +114,8 @@ export class ClaudeAdapter extends EventEmitter {
     return id;
   }
   // Claude has no mid-turn steering here. Deliver the reaction after the current turn rather than interrupting its work.
-  async steer(id, prompt, image) { const epoch = this.cancelEpoch.get(id); const record = this.active.get(id); if (!record || record.closed || record.inputClosed || image) { await record?.finished; if (this.cancelEpoch.get(id) !== epoch) throw new Error('Follow-up cancelled'); return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
+  async steer(id, prompt, image) { const record = this.active.get(id); if (!record || record.closed || record.inputClosed || image) { await record?.finished; if (record?.cancelled) throw new Error('Follow-up cancelled'); return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
   async cancel(id) {
-    this.cancelEpoch.set(id, (this.cancelEpoch.get(id) ?? 0) + 1);
     const record = this.active.get(id); if (!record) return;
     record.cancelled = true; record.followUps.length = 0; record.wake?.(); await record.stream.interrupt();
     await Promise.race([record.finished, new Promise((_, reject) => { const t = setTimeout(() => reject(new Error('Claude has not confirmed cancellation')), 15000); t.unref(); })]);
