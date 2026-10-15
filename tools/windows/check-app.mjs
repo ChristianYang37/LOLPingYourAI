@@ -7,17 +7,21 @@ import { resolve, join } from 'node:path';
 import { WebSocket } from 'ws';
 
 const executable = resolve(process.argv[2] || 'release/win-unpacked/LOLPingYourAI.exe');
+const liveHarness = process.argv.includes('--live-dsh') ? 'dsh' : process.argv.includes('--live-codex') ? 'codex' : undefined;
+if (process.argv.includes('--live-dsh') && process.argv.includes('--live-codex')) throw new Error('Choose one live harness');
+if (liveHarness && process.argv.includes('--dsh-protocol')) throw new Error('Run protocol and authenticated probes separately');
 await mkdir('.local', { recursive: true });
 const directory = await mkdtemp(resolve('.local/windows app profile '));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function launch(expected, change) {
   const env = { ...process.env, LOLPINGAI_DATA_DIR: directory }; delete env.ELECTRON_RUN_AS_NODE;
+  if (process.argv.includes('--dsh-protocol')) env.DSH_HOME = join(directory, 'dsh-home');
   const child = spawn(executable, ['--inspect=127.0.0.1:0'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '', inspector, exited = false, socket;
   const exit = new Promise(r => child.on('exit', code => { exited = true; r(code); }));
   child.stderr.on('data', data => { stderr += data; inspector ??= stderr.match(/ws:\/\/127\.0\.0\.1:\d+\/[^\s]+/)?.[0]; });
   child.stdout.resume();
-  const watchdog = setTimeout(() => child.kill(), process.argv.includes('--live-codex') ? 660000 : 60000);
+  const watchdog = setTimeout(() => child.kill(), liveHarness ? 660000 : 60000);
   const wait = async fn => { for (let i = 0; i < 200; i++) { if (exited) throw new Error(`App exited: ${stderr.slice(-2000)}`); const value = await fn(); if (value) return value; await sleep(100); } throw new Error('Packaged app readiness timed out'); };
   try {
     await wait(() => inspector);
@@ -44,8 +48,17 @@ async function launch(expected, change) {
       return values?.find(text => text.length > 100);
     });
     assert.ok(renderer.length > 100, 'Actual settings/chat renderer loaded');
+    if (process.argv.includes('--dsh-protocol')) {
+      await call('config', { harness: 'dsh' });
+      const invoke = expression => evaluate(`${electron}.BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/settings/')).webContents.executeJavaScript(${JSON.stringify(expression)})`);
+      const capabilities = await invoke("window.teammateApi.call('connection', {})");
+      assert.equal(capabilities.protocol, 'ACP');
+      const catalog = await invoke("window.teammateApi.call('models', { harness: 'dsh' })");
+      assert.ok(catalog.models.length > 0 && catalog.models.some(m => m.id === catalog.defaultModel));
+      console.log(`Packaged DSH ACP: connection and ${catalog.models.length} model choices passed; no model API request`);
+    }
     if (change) await call('config', { regionSize: change });
-    if (change && process.argv.includes('--live-codex')) await (await import('./live-codex.mjs')).liveCodex(directory);
+    if (change && liveHarness) await (await import('./live-codex.mjs')).liveCodex(directory, liveHarness);
     // Graceful app quit runs bridge, harness and hook cleanup.
     socket.send(JSON.stringify({ id: ++id, method: 'Runtime.evaluate', params: { expression: `setImmediate(()=>${electron}.app.quit()); true` } }));
     socket.close();

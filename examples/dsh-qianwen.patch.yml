@@ -1,0 +1,31 @@
+# DSH 0.2.0-rc.2; credentials belong in DSH's local store or environment.
+# General API keys from https://platform.qianwenai.com/home/api-keys
+# Token Plan keys use a different endpoint; do not silently fall back between them.
+# https://platform.qianwenai.com/docs/developer-guides/getting-started/latest-model
+- id: llm-pi-ai
+  config:
+    providers:
+      qianwen:
+        displayName: Qianwen AI Platform
+        apiKeyEnv: DASHSCOPE_API_KEY
+        api: openai-completions
+        baseURL: https://maas.qianwenaiapi.com/compatible-mode/v1
+        compat:
+          thinkingFormat: qwen
+          supportsReasoningEffort: true
+          supportsDeveloperRole: false
+          supportsStore: false
+        models:
+          - id: qwen3.8-flash
+            input: [text, image]
+            contextWindow: 1000000
+            maxTokens: 4096
+            reasoningEfforts:
+              off:
+              low: low
+              medium: medium
+              xhigh: xhigh
+- id: acp
+  config:
+    provider: qianwen
+    model: qwen3.8-flash

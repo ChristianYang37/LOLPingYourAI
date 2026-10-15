@@ -12,7 +12,7 @@ Tested CLI: **`@deepseek-ai/dsh@0.2.0-rc.2`**. This is a developer preview; pin 
 npm install --prefix "$HOME/.local/share/lolpingyourai-dsh" @deepseek-ai/dsh@0.2.0-rc.2
 ```
 
-On macOS the app discovers that installation automatically. For another location (including Windows), set `LOLPINGAI_DSH` to the absolute path of `@deepseek-ai/dsh/lib/bin.js` before launching the app. This variable names the JavaScript entry, not the shell launcher. DSH remains optional; Codex and Claude do not load its dependencies.
+The app discovers that home-directory installation on macOS and Windows. For another location, set `LOLPINGAI_DSH` to the absolute path of `@deepseek-ai/dsh/lib/bin.js` before launching the app. This variable names the JavaScript entry, not the shell launcher. DSH remains optional; Codex and Claude do not load its dependencies.
 
 ### Free text trial
 
@@ -39,7 +39,32 @@ The [Bailian example](../examples/dsh-bailian.patch.yml) uses `qwen3.8-flash` wi
 
 `node tools/try-dsh.mjs --bailian` checks ACP without a model request; adding `--live` uses `DASHSCOPE_API_KEY` from the shell for a small text request. The source example uses the generic endpoint; the desktop runtime patch can use your workspace endpoint. Never commit either a real key or an account-specific runtime file.
 
-**Evidence (2026-10-15):** the real DSH process passed ACP initialization, session creation, MCP discovery, close and resume on macOS. With a user-owned Bailian key and workspace endpoint, DSH returned the expected text and read `ORBIT42` plus red/blue circles from a synthetic image; effective reasoning was `off`. The first image answer omitted the text; an explicit two-field request passed. After desktop permissions were granted, the installed app completed a real assist ping: read a local test page, reverse-ping, click/type, screenshot verification and restoration of the original note. Independent input events confirmed both edits. That installed build required a uniquely sized window. The source now includes the exact-window identity repair and independent Electron/Chrome/Safari regressions in [window-identity.md](window-identity.md); a full DSH model-driven run with the new helper has not been repeated. SiliconFlow model inference and Windows hardware remain untested. Unit tests cover effort mapping, text/image admission and cancellation.
+### Qianwen AI Platform on Windows
+
+For general API keys from `platform.qianwenai.com/home/api-keys`, use [the Qianwen example](../examples/dsh-qianwen.patch.yml). Its endpoint is `https://maas.qianwenaiapi.com/compatible-mode/v1`, distinct from the older Bailian endpoint and from Token Plan. [The platform documents the API endpoint](https://platform.qianwenai.com/docs/api-reference/toolkitframework/openai-compatible/overview) and [Qwen3.8-Flash image input and reasoning levels](https://platform.qianwenai.com/docs/developer-guides/getting-started/latest-model).
+
+```powershell
+npm install --prefix "$env:USERPROFILE/.local/share/lolpingyourai-dsh" --save-exact @deepseek-ai/dsh@0.2.0-rc.2
+node tools/try-dsh.mjs --qianwen
+$env:LOLPINGAI_DSH_PATCH = (Resolve-Path examples/dsh-qianwen.patch.yml).Path
+node tools/windows/check-app.mjs release/win-unpacked/LOLPingYourAI.exe --dsh-protocol
+```
+
+For normal app launches, place the patch at `%APPDATA%/LOLPingYourAI/dsh.patch.yml` (preserve an existing configuration). In DSH's Models settings, save the API key under **Qianwen AI Platform**, not DeepSeek. DSH manages the credential in its local home; do not put it in the patch or repository. After saving, `node tools/try-dsh.mjs --qianwen --live --stored-key` uses DSH's normal credential store for a small text request. This explicit live command can consume provider usage. Without `--stored-key`, the live probe requires `DASHSCOPE_API_KEY` in its process environment and uses a disposable DSH home.
+
+Windows evidence (2026-10-16): installation, real ACP initialize/create/MCP mount/close/resume and model catalog passed. With a locally stored Qianwen key, the real model returned the expected text, read `ORBIT42` and identified red then blue circles from a synthetic image. The v0.1.2 packaged app completed a disposable Test Board observation, changed its note to `Ping received.`, restored `Ready for a ping.`, and quit/restarted cleanly. The board independently reported both exact values. Effective model was `qianwen/qwen3.8-flash`, with thinking enabled at `low`. This does not verify interruption during an active model turn.
+
+Reproduce the authenticated checks explicitly (these consume provider usage):
+
+```powershell
+node tools/try-dsh.mjs --qianwen --live --stored-key --vision
+$env:LOLPINGAI_DSH_PATCH = (Resolve-Path examples/dsh-qianwen.patch.yml).Path
+node tools/windows/check-app.mjs release/win-unpacked/LOLPingYourAI.exe --live-dsh
+```
+
+Windows CI installs the pinned DSH release and runs the protocol probe plus packaged connection/model-catalog/restart checks on Windows 2022/Node 22 and Windows 2025/Node 24. These CI checks use disposable DSH homes and make no model API request; live inference remains opt-in.
+
+**Evidence (2026-10-15):** the real DSH process passed ACP initialization, session creation, MCP discovery, close and resume on macOS. With a user-owned Bailian key and workspace endpoint, DSH returned the expected text and read `ORBIT42` plus red/blue circles from a synthetic image; effective reasoning was `off`. The first image answer omitted the text; an explicit two-field request passed. After desktop permissions were granted, the installed app completed a real assist ping: read a local test page, reverse-ping, click/type, screenshot verification and restoration of the original note. Independent input events confirmed both edits. That installed build required a uniquely sized window. The source now includes the exact-window identity repair and independent Electron/Chrome/Safari regressions in [window-identity.md](window-identity.md); a full DSH model-driven run with the new helper has not been repeated. SiliconFlow model inference remains untested; see the newer Windows evidence above. Unit tests cover effort mapping, text/image admission and cancellation.
 
 ## Model selection
 
@@ -47,13 +72,13 @@ Choosing DSH in settings loads its ACP model selector, including provider-qualif
 
 ## Thinking controls
 
-Thinking is enabled by default. The numeric effort setting selects among the model’s advertised **enabled** levels: `0` means the lowest enabled level, `1` the next. A separate DSH checkbox disables thinking only when the provider offers an off option. The example Qwen routes advertise only `off` and `high`, so every enabled index resolves to `high`; this does not mean DSH itself has only two levels. DeepSeek’s native adapter advertises `off`, `low`, `high`, and `max`. These are native ACP/API settings, not invented prompt presets. Customize task wording separately under **Signals**. Models without an advertised selector retain their provider defaults; the app does not claim to control their effort. Earlier live evidence using `off` below predates this default change.
+Thinking is enabled by default. The numeric effort setting selects among the model’s advertised **enabled** levels: `0` means the lowest enabled level, `1` the next. A separate DSH checkbox disables thinking only when the provider offers an off option. The Bailian and SiliconFlow examples advertise only `off` and `high`, so every enabled index resolves to `high`; this does not mean DSH itself has only two levels. DeepSeek’s native adapter advertises `off`, `low`, `high`, and `max`. These are native ACP/API settings, not invented prompt presets. Customize task wording separately under **Signals**. Models without an advertised selector retain their provider defaults; the app does not claim to control their effort. Earlier live evidence using `off` below predates this default change.
 
 ## 中文
 
 通过 DeepSeek 官方 **ACP** 接口接入。模型、凭据、历史和工具仍由 DSH 自己管理；我们只传递 ping、skill、截图和桌面 MCP。ACP 不支持途中追加，因此表情在当前轮结束后继续发送。撤退必须等原请求确认取消。
 
-使用上方安装命令下载固定版本 **0.2.0-rc.2**。macOS 安装目录会自动发现；自定义路径或 Windows 可用 `LOLPINGAI_DSH` 指定 `@deepseek-ai/dsh/lib/bin.js` 的绝对路径。
+使用上方安装命令下载固定版本 **0.2.0-rc.2**。macOS 和 Windows 均会自动发现用户目录下的默认安装位置；自定义路径可用 `LOLPINGAI_DSH` 指定 `@deepseek-ai/dsh/lib/bin.js` 的绝对路径。
 
 免费试用配置选用硅基流动 `Qwen/Qwen3-8B`，2026-10-15 官方价格页标为免费。需要你自己的账户和 key，不会自动切换付费模型。它只支持文本：适合验证连接、表情对话，不能证明截图理解或桌面执行成功。
 
@@ -63,6 +88,6 @@ Thinking is enabled by default. The numeric effort setting selects among the mod
 
 也可使用[百炼视觉配置](../examples/dsh-bailian.patch.yml)：模型为 `qwen3.8-flash`。先确认北京地域的账户免费额度，并为该模型开启“免费额度用完即停”。将 `DASHSCOPE_API_KEY` 保存到 DSH 凭据库，把示例 `baseURL` 换成创建 Key 时显示的业务空间 OpenAI 兼容地址，再复制到应用运行配置并重启。免费额度有期限，不代表模型长期免费。`node tools/try-dsh.mjs --bailian` 验证协议，加 `--live` 后从终端环境读取 Key 并发送文字测试。
 
-2026-10-15 已通过 DSH＋百炼真实文字回答和合成图片识别：读取 `ORBIT42` 与红、蓝圆形，最低思考档为 `off`。第一次图片回答漏掉文字，明确要求两个字段后通过。桌面权限生效后，安装版完成真实求助 ping：读取测试页面、反 ping、点击输入、截图核验并恢复原文，页面独立记录了两次实际输入。那次安装版测试使用了尺寸不同的独立窗口。当前源码已包含窗口 ID 修复及 Electron／Chrome／Safari 独立回归，详见 [window-identity.md](window-identity.md)；新 helper 与 DSH 模型的完整闭环尚未重跑。硅基流动真实推理、Windows 实机尚未验证。
+2026-10-15 已通过 DSH＋百炼真实文字回答和合成图片识别：读取 `ORBIT42` 与红、蓝圆形，最低思考档为 `off`。第一次图片回答漏掉文字，明确要求两个字段后通过。桌面权限生效后，安装版完成真实求助 ping：读取测试页面、反 ping、点击输入、截图核验并恢复原文，页面独立记录了两次实际输入。那次安装版测试使用了尺寸不同的独立窗口。当前源码已包含窗口 ID 修复及 Electron／Chrome／Safari 独立回归，详见 [window-identity.md](window-identity.md)；2026-10-16 已在 Windows v0.1.2 打包版完成 DSH＋千问真实文字、合成图片识别，以及测试窗口的观察、改字、恢复原文和退出重启，使用 qwen3.8-flash、low 思考档。硅基流动真实推理尚未验证。
 
 思考默认开启。数字档位只计算后端提供的开启档：`0` 最低、`1` 次低；关闭思考使用独立开关。百炼示例只有 `off/high`，因此开启时都映射到 `high`，不是 DSH 只有两档。DeepSeek 原生适配器提供 `off/low/high/max`。原生强度通过 ACP/API 设置；任务提示词在「信号」里独立编辑。没有声明档位的模型保留提供商默认值。上文 `off` 的实测记录属于默认值修改之前的版本。
