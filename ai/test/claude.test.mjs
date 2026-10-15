@@ -71,6 +71,14 @@ test('Claude exposes only read-only context tools; hooks refuse everything else 
   assert.equal((await options.canUseTool('mcp__other__send_email', {})).behavior, 'deny');
 });
 
+test('Claude sessions load only the LOLPingYourAI MCP server, not account connectors or user MCP settings', async () => {
+  const sdk = fakeSdk(), a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
+  const id = await a.create();
+  await a.send(id, 'Question'); await completion(a);
+  await a.send(id, 'Next ping'); await completion(a);
+  for (const { options } of sdk.calls) { assert.equal(options.strictMcpConfig, true); assert.deepEqual(Object.keys(options.mcpServers), ['lolpingyourai']); }
+});
+
 test('context tool policy keeps credentials and whole-home sweeps out of reach', () => {
   const home = '/Users/me', at = '/Users/me/Library/Application Support/LOLPingYourAI';
   const allowed = (name, input) => toolPolicy(name, input, at, home) === null;
