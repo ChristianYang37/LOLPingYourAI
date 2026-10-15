@@ -9,8 +9,7 @@ const skillPath = fileURLToPath(new URL('../../skills/lolping-your-ai/SKILL.md',
 const cwd = join(homedir(), 'Library/Application Support/LOLPingYourAI');
 
 // Stands in for the Agent SDK: reads one streamed user message per turn and answers it with a result.
-// `exiting` keeps the stream open after the input ends, as Claude Code does while it shuts down.
-function fakeSdk({ missingSessions = new Set(), exiting } = {}) {
+function fakeSdk({ missingSessions = new Set() } = {}) {
   const calls = [];
   const query = ({ prompt, options }) => {
     const call = { options, prompts: [], interrupted: false }; calls.push(call);
@@ -19,7 +18,7 @@ function fakeSdk({ missingSessions = new Set(), exiting } = {}) {
     async function* run() {
       if (options.resume && missingSessions.has(options.resume)) { options.stderr?.(`No conversation found with session ID: ${options.resume}\n`); throw new Error('Claude Code process exited with code 1'); }
       for (;;) {
-        const next = await input.next(); if (next.done) { await exiting?.(); return; }
+        const next = await input.next(); if (next.done) return;
         call.prompts.push(next.value.message.content);
         yield { type: 'system', subtype: 'init', session_id: session };
         if (await Promise.race([interrupted, new Promise(resolve => setTimeout(() => resolve(false), 20))])) { yield { type: 'result', subtype: 'error_during_execution', is_error: true, session_id: session }; return; }
@@ -44,16 +43,6 @@ test('a reaction during a Claude turn is delivered after it, in the same session
   await a.send(id, 'Next ping'); await completion(a); assert.equal(sdk.calls[1].options.resume, id);
 });
 
-test('a reaction that arrives while a finished Claude turn shuts down starts the next turn instead of being lost', async () => {
-  let ended; const inputEnded = new Promise(resolve => { ended = resolve; });
-  const sdk = fakeSdk({ exiting: () => { ended(); return new Promise(resolve => setTimeout(resolve, 20)); } }), a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
-  const id = await a.create(); await a.send(id, 'Question');
-  await inputEnded; assert.equal(a.active.has(id), true);
-  await a.steer(id, 'Nice'); await completion(a);
-  assert.deepEqual(sdk.calls.map(call => call.prompts.map(p => p[0].text)), [['Question'], ['Nice']]);
-  assert.equal(sdk.calls[1].options.resume, id);
-});
-
 test('Claude retreat interrupts, drops queued reactions and confirms the turn as interrupted', async () => {
   const sdk = fakeSdk(), a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk }), done = completion(a);
   const id = await a.create(); await a.send(id, 'Work'); await a.steer(id, 'Nice'); await a.cancel(id);
@@ -73,7 +62,6 @@ test('Claude exposes only read-only context tools; hooks refuse everything else 
   await a.send(await a.create(), 'Question'); await completion(a);
   const { options } = sdk.calls[0];
   assert.deepEqual(options.tools, contextTools);
-  assert.deepEqual(Object.keys(options.mcpServers), ['lolpingyourai']); assert.equal(options.strictMcpConfig, true);
   const hook = options.hooks.PreToolUse[0].hooks[0];
   assert.equal((await hook({ tool_name: 'Bash', tool_input: { command: 'ls' } })).hookSpecificOutput.permissionDecision, 'deny');
   assert.deepEqual(await hook({ tool_name: 'mcp__lolpingyourai__reply_ping', tool_input: {} }), {});
@@ -91,16 +79,4 @@ test('context tool policy keeps credentials and whole-home sweeps out of reach',
   for (const [name, input] of [['Read', { file_path: '/Users/me/.ssh/id_ed25519' }], ['Read', { file_path: '/Users/me/code/app/.env.local' }], ['Read', { file_path: 'bridge.json' }],
     ['Read', { file_path: '/Users/me/.aws/credentials' }], ['Grep', { pattern: 'token', path: '/Users/me' }], ['Glob', { pattern: '**/*', path: '/' }],
     ['Grep', { pattern: 'KEY', path: '/Users/me/code/app', glob: '**/.env' }], ['Write', { file_path: '/tmp/x' }], ['Bash', { command: 'ls' }]]) assert.equal(allowed(name, input), false, `${name} ${JSON.stringify(input)}`);
-});
-
-test('retreat cancels a late reaction waiting for Claude process shutdown', async () => {
-  let ended, release;
-  const reached = new Promise(resolve => { ended = resolve; });
-  const sdk = fakeSdk({ exiting: () => { if (sdk.calls.length !== 1) return; ended(); return new Promise(resolve => { release = resolve; }); } });
-  const a = new ClaudeAdapter({ cwd, mcp: {}, skillPath, sdk });
-  const id = await a.create(); await a.send(id, 'Work'); await reached;
-  const reaction = a.steer(id, 'Late reaction');
-  const refused = assert.rejects(reaction, /cancelled/i);
-  const stopped = a.cancel(id); release(); await stopped; await refused;
-  assert.equal(sdk.calls.length, 1, 'Retreat must not start a second turn');
 });

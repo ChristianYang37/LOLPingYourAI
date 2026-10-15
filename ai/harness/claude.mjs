@@ -22,7 +22,7 @@ export function toolPolicy(name, input = {}, cwd, home = homedir()) {
 }
 
 export class ClaudeAdapter extends EventEmitter {
-  constructor({ cwd, mcp, skillPath, executable, sdk }) { super(); Object.assign(this, { cwd, mcp, skillPath, executable }); this.sdk = sdk; this.active = new Map(); this.known = new Set(); this.cancelEpoch = new Map(); }
+  constructor({ cwd, mcp, skillPath, executable, sdk }) { super(); Object.assign(this, { cwd, mcp, skillPath, executable }); this.sdk = sdk; this.active = new Map(); this.known = new Set(); }
   async load() { return this.sdk ??= await import('@anthropic-ai/claude-agent-sdk'); }
   async capabilities() { await this.load(); return { images: true, steer: 'after-current-turn', interrupt: true, desktop: 'project-mcp', context: contextTools, nativeDesktop: false }; }
   async create() { const id = randomUUID(); return id; }
@@ -35,8 +35,6 @@ export class ClaudeAdapter extends EventEmitter {
     const skill = await readFile(this.skillPath, 'utf8');
     const refuse = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
     const options = { cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
-      // Only the project MCP server: claude.ai account connectors and user or project MCP servers never reach this teammate.
-      strictMcpConfig: true,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       // Hooks run before settings allow-rules, so a user's global allow list cannot widen this teammate's tools.
       hooks: { PreToolUse: [{ hooks: [async input => { const reason = toolPolicy(input.tool_name, input.tool_input ?? {}, this.cwd); return reason ? refuse(reason) : {}; }] }] },
@@ -48,8 +46,7 @@ export class ClaudeAdapter extends EventEmitter {
       yield message(content);
       for (let turn = 1; ; turn++) {
         while (record.results < turn && !record.closed) await new Promise(resolve => { record.wake = resolve; });
-        // Ending the input closes the record at once: a reaction sent while the CLI shuts down starts the next turn instead of being lost.
-        if (record.closed || record.cancelled || !record.followUps.length) { record.closed = true; return; }
+        if (record.closed || record.cancelled || !record.followUps.length) return;
         yield message(record.followUps.splice(0).join('\n\n'));
       }
     }
@@ -82,9 +79,8 @@ export class ClaudeAdapter extends EventEmitter {
     return id;
   }
   // Claude has no mid-turn steering here. Deliver the reaction after the current turn rather than interrupting its work.
-  async steer(id, prompt, image) { const epoch = this.cancelEpoch.get(id); const record = this.active.get(id); if (!record || record.closed || image) { await record?.finished; if (this.cancelEpoch.get(id) !== epoch) throw new Error('Follow-up cancelled'); return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
+  async steer(id, prompt, image) { const record = this.active.get(id); if (!record || record.closed || image) { await record?.finished; return this.send(id, prompt, image); } record.followUps.push(prompt); return id; }
   async cancel(id) {
-    this.cancelEpoch.set(id, (this.cancelEpoch.get(id) ?? 0) + 1);
     const record = this.active.get(id); if (!record) return;
     record.cancelled = true; record.followUps.length = 0; record.wake?.(); await record.stream.interrupt();
     await Promise.race([record.finished, new Promise((_, reject) => { const t = setTimeout(() => reject(new Error('Claude has not confirmed cancellation')), 15000); t.unref(); })]);
