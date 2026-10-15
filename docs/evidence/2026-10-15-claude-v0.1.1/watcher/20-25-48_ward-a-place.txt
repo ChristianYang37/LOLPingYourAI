@@ -1,0 +1,5 @@
+$ node drive.mjs \[\{\"signal\":\"vision\",\"point\":\{\"x\":1119,\"y\":690\}\}\]
+started 2026-10-15 20:25:48 CST
+[   0.3s]   ✗ refusing to ping: the window under {"x":1119,"y":690} is Claude pid 70622, not the Test Board (4599)
+ended 20:25:49
+[{"id":"8c819c10-cae1-45d4-9332-18a2c70017a2","harness":"claude","dueAt":1792057494913,"status":"failed","error":"Target window closed or changed","due":"17:44:54","target":{"height":520,"width":680,"x":100,"y":100}},{"id":"bfc3784b-529e-46dd-8b27-b7359312a364","harness":"claude","dueAt":1792060162513,"status":"completed","due":"18:29:22","target":{"height":520,"width":680,"x":100,"y":100}}]

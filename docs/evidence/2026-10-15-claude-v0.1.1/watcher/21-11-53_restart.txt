@@ -1,0 +1,7 @@
+$ osascript -e 'quit app "LOLPingYourAI"'; then env -i … /usr/bin/open /Applications/LOLPingYourAI.app
+21:11:53 before
+5019
+21:11:59 after quit
+no process
+21:12:19 relaunched
+6389

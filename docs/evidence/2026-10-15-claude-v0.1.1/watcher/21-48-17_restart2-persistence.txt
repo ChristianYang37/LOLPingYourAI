@@ -1,0 +1,18 @@
+$ osascript quit; env -i … open /Applications/LOLPingYourAI.app; then read settings.json / ai-config.json / emotes
+21:48:17 before
+{"custom":["c:d4b2923f770e55212ec7192ce67f24d2 My emote","c:c5a1f5a2d1cd73c4ffdaea47872866fb 小狗 (dog)","c:62431983ece4a435a0938d3259c654d1 生成faker","c:a6b402be37600bf82b4faa91388d8482 thumbs_up_chibi"],"wheel":["unworthy_cn","c:d4b2923f770e55212ec7192ce67f24d2","cheeky_poro","c:62431983ece4a435a0938d3259c654d1","angry_kitty","c:a6b402be37600bf82b4faa91388d8482","bee_happy","bee_mad"]}
+{"c:62431983ece4a435a0938d3259c654d1":{"label":"c:62431983ece4a435a0938d3259c654d1","mode":"emotion","prompt":"React to this emote without changing the task."}}
+21:48:22 quit
+no process
+21:48:31 relaunched
+9699
+{"custom":["c:d4b2923f770e55212ec7192ce67f24d2 My emote","c:c5a1f5a2d1cd73c4ffdaea47872866fb 小狗 (dog)","c:62431983ece4a435a0938d3259c654d1 生成faker","c:a6b402be37600bf82b4faa91388d8482 thumbs_up_chibi"],"wheel":["unworthy_cn","c:d4b2923f770e55212ec7192ce67f24d2","cheeky_poro","c:62431983ece4a435a0938d3259c654d1","angry_kitty","c:a6b402be37600bf82b4faa91388d8482","bee_happy","bee_mad"]}
+{"c:62431983ece4a435a0938d3259c654d1":{"label":"c:62431983ece4a435a0938d3259c654d1","mode":"emotion","prompt":"React to this emote without changing the task."}}
+62431983ece4a435a0938d3259c654d1.webp
+a6b402be37600bf82b4faa91388d8482.webp
+c5a1f5a2d1cd73c4ffdaea47872866fb.webp
+d4b2923f770e55212ec7192ce67f24d2.webp
+  "mappings": {
+   "c:62431983ece4a435a0938d3259c654d1": {
+    "label": "c:62431983ece4a435a0938d3259c654d1",
+    "mode": "emotion",

@@ -1,0 +1,34 @@
+{
+  "customEmotes": [
+    {
+      "id": "c:d4b2923f770e55212ec7192ce67f24d2",
+      "name": "My emote",
+      "animated": false
+    },
+    {
+      "id": "c:c5a1f5a2d1cd73c4ffdaea47872866fb",
+      "name": "小狗 (dog)",
+      "animated": false
+    },
+    {
+      "id": "c:62431983ece4a435a0938d3259c654d1",
+      "name": "生成faker",
+      "animated": false
+    },
+    {
+      "id": "c:a6b402be37600bf82b4faa91388d8482",
+      "name": "thumbs_up_chibi",
+      "animated": false
+    }
+  ],
+  "emoteWheel": [
+    "unworthy_cn",
+    "c:d4b2923f770e55212ec7192ce67f24d2",
+    "cheeky_poro",
+    "c:62431983ece4a435a0938d3259c654d1",
+    "angry_kitty",
+    "c:a6b402be37600bf82b4faa91388d8482",
+    "bee_happy",
+    "bee_mad"
+  ]
+}

@@ -1,0 +1,6 @@
+$ node lockwatch.mjs 2026-10-15T21:58:00+08:00
+started 2026-10-15 21:26:55 CST
+21:26:56 unlocked
+21:27:29 LOCKED
+21:33:24 unlocked
+ended 21:58:00

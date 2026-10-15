@@ -1,0 +1,6 @@
+$ node /Applications/LOLPingYourAI.app/Contents/Resources/app/ai/cli.mjs bind '{"harness":"claude","summary":"Goal: acceptance test of LOLPingYourAI v0.1.1. Only edit the LOLPingYourAI Test Board note; never touch other windows. Progress: none yet. Next: wait for pings."}'
+20:10:25
+{
+  "id": null,
+  "binding": "handoff"
+}

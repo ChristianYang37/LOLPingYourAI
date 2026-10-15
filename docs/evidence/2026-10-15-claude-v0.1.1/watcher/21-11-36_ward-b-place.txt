@@ -1,0 +1,8 @@
+$ node drive.mjs \[\{\"signal\":\"vision\",\"point\":\{\"x\":1119,\"y\":690\},\"after\":\"none\"\}\]
+started 2026-10-15 21:11:36 CST
+[   0.2s] ▶ ping vision  board="Ready for a ping."
+[   0.5s]   → {"id":"f027db73-d637-4365-9001-4df06febf12e","target":{"app":"Electron","bounds":{"height":520,"width":680,"x":779,"y":430},"id":"14593","pid":4599,"title":"LOL… (273 ms)
+[   0.5s]   board="Ready for a ping."
+[   0.5s] ■ busy=false session=S1 wards=["failed","completed","completed","pending"]
+ended 21:11:37
+21:11:37 [{"id":"f027db73-d637-4365-9001-4df06febf12e","harness":"claude","dueAt":1792071697364,"status":"pending","due":"21:41:37","target":{"height":520,"width":680,"x":779,"y":430}}]

@@ -1,0 +1,171 @@
+[
+  {
+    "id": "8c819c10-cae1-45d4-9332-18a2c70017a2",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 100,
+        "y": 100
+      },
+      "id": "13574",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.22941176470588234,
+        "y": 0.4230769230769231
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792057494913,
+    "status": "failed",
+    "error": "Target window closed or changed"
+  },
+  {
+    "id": "bfc3784b-529e-46dd-8b27-b7359312a364",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 100,
+        "y": 100
+      },
+      "id": "14144",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.3073529411764706,
+        "y": 0.4269230769230769
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792060162513,
+    "status": "completed"
+  },
+  {
+    "id": "289bbb77-544d-4790-91b7-c45efd956b15",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 779,
+        "y": 430
+      },
+      "id": "14593",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792068966039,
+    "status": "completed"
+  },
+  {
+    "id": "f027db73-d637-4365-9001-4df06febf12e",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 779,
+        "y": 430
+      },
+      "id": "14593",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792071697364,
+    "status": "completed"
+  },
+  {
+    "id": "5d484929-a41f-4974-847d-add0bb03828d",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 779,
+        "y": 430
+      },
+      "id": "14593",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792070140781,
+    "status": "completed"
+  },
+  {
+    "id": "9fbf699a-735c-41b5-a07d-a01ad02020cd",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 779,
+        "y": 430
+      },
+      "id": "14593",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792070566016,
+    "status": "cancelled"
+  },
+  {
+    "id": "238d08d7-fb79-4ada-80f4-c6f9099dd6e7",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 779,
+        "y": 430
+      },
+      "id": "14593",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792070606431,
+    "status": "completed"
+  },
+  {
+    "id": "a9c240bf-d13c-44f2-9d05-f5c5394a7e19",
+    "target": {
+      "app": "Electron",
+      "bounds": {
+        "height": 520,
+        "width": 680,
+        "x": 779,
+        "y": 430
+      },
+      "id": "14593",
+      "title": "LOLPingYourAI Test Board",
+      "relative": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "harness": "claude",
+    "dueAt": 1792071004396,
+    "status": "completed"
+  }
+]

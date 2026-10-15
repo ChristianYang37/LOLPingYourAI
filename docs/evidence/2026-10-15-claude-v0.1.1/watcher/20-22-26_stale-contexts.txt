@@ -1,0 +1,5 @@
+$ node stale.mjs danger-superseded=39c26c77-5bb1-4c3a-9153-80c5aaa3ba1d retreat-superseded=5b3e74f0-26c1-4bce-a235-b4d51a12ee47
+started 2026-10-15 20:22:26 CST
+20:22:27 danger-superseded 400 {"error":"Stale ping context. Stop using the previous target."}
+20:22:27 retreat-superseded 400 {"error":"Desktop action cancelled or not authorized by this ping"}
+ended 20:22:27

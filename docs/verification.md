@@ -12,6 +12,36 @@ The macOS + Codex desktop-control loop was exercised with a real model and an is
 - Built the Apple Silicon DMG and installed the app. Strict deep code-signature verification passed. No new SHA-256 verification or checksum artifact was performed. The new installed app's connection checks passed, but its own helper reported both desktop permissions unavailable after replacement; renewed macOS authorization is pending. Earlier permission evidence below applies to earlier builds.
 - No authenticated Claude run or Windows hardware test was performed. This preview is local; it has not replaced the published v0.1.0 release.
 
+## Signed-in Claude run on the v0.1.1 release — 2026-10-15
+
+External tester run of `docs/acceptance.md` steps 1–8. The full report, with per-case times, redacted session timelines, command-headed logs, captures, ward state before and after a restart, the scripts and a 127 s screen recording, is in [`docs/evidence/2026-10-15-claude-v0.1.1/report.md`](evidence/2026-10-15-claude-v0.1.1/report.md). Session IDs, other windows' content and the account's connector name are redacted there.
+
+**Setup**
+- **Build:** the published `LOLPingYourAI-0.1.1-arm64.dmg`; its SHA-256 matched the release digest. The packaged `ai/` and `skills/` files are byte-identical to `7c6edc1`.
+- **Not tested:** #6 (`strictMcpConfig`, merged as `e5475e9` during the run) was not in this build, and current main was not tested.
+- **Claude:** Agent SDK 0.2.141 with Claude Code 2.1.141; the model was the default `claude-opus-4-7[1m]`; claude.ai login.
+- **Machine:** macOS 27.0.1 on Apple Silicon, built-in display only. The app was launched with a clean environment; the board was `pnpm exec electron tools/test-board.cjs`.
+
+**Failed or partial**
+- **Step 2 failed.** Every `key` and `type` action against the Test Board was refused with `Target focus did not settle (no focused control)` (`native/desktop/WindowIdentity.swift`), while clicks succeeded and the caret was visible in the note. The note never changed, so the restoration half of step 3 could not be exercised. The cause is not established.
+- **`maximize` (step 5)** returned `Window did not reach requested bounds` although the window reached 1470×884. In a hand-sent On my way near the bottom-right corner, it left the window 1470 px wide at x = 153, past the screen edge. `restore` returned exactly 680×520 at (0,72).
+
+**Observed**
+- **Steps 1, 3 and 4:** the Question read the note without editing it. Danger interrupted the active turn (`error_during_execution`) and started a new context. Retreat returned `stopped: true` after 1.5 s with no later action. Both superseded contexts were rejected with HTTP 400.
+- **Step 5, coordinates:** after the tester moved the board, a ping at its new centre produced the same image as before; at the display edge the valid area was clipped to the screen.
+- **Step 6:** a default 0.5-hour ward survived an app quit and relaunch with the board open, and made exactly one observation-only visit 4 s after its due time. In accelerated runs (3 min):
+  - a ward cancelled in Settings never ran;
+  - a ward due while the screen was locked (locked 21:27:29–21:33:24) ran once, 4 s after unlock.
+  - Separately, a ward due during unplanned system sleep ran once, 5 s after wake.
+- **Step 7:**
+  - a local crop (`local-crop`), a description-generated emote and a reference-image-generated emote (both labelled `vector-generated`) were accepted onto the wheel;
+  - a custom emote was bound as an `emotion` signal and reached the teammate with that mode;
+  - emotes, wheel and mapping survived a restart.
+- **Step 8:** both wheels, cancel, click-through over a ping marker and the reply card are in the recording; the tester heard the tones.
+- **Effort and reply card:** with effort 0 the app reported effective effort `low`, and with 8 it reported `max`; the transcript has no effort field to confirm what the model received. A card follow-up started a new turn in the same session.
+
+**Not tested:** a stop timeout surfacing as an error, a closed target window on this build, multiple or mixed-DPI displays, the card's Copy result, and Windows.
+
 The sections below retain historical evidence for their dated builds.
 
 ### Bailian API follow-up — 2026-10-15
