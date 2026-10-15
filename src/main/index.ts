@@ -3,6 +3,7 @@ import { app, dialog, Menu, shell, systemPreferences } from 'electron';
 import { randomInt } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { hotkeyLabel } from '../shared/keys';
@@ -23,6 +24,8 @@ const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.secur
 registerAppScheme();
 process.on('SIGTERM', () => app.quit());
 app.setAppUserModelId('dev.lolpingyourai.desktop');
+// Keep Chromium storage and the instance lock inside the same explicit test/profile directory.
+if (process.env.LOLPINGAI_DATA_DIR) { mkdirSync(settingsDir(), { recursive: true }); app.setPath('userData', settingsDir()); }
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

@@ -68,6 +68,29 @@ test('window restore state is not inherited by a reused PID and window ID', asyn
   await assert.rejects(desktop.action({ action: 'restore' }, { target }), /No original window bounds saved/);
 });
 
+test('failed maximize does not save a false original; repeated maximize preserves first successful original', async () => {
+  let target = { id: '1', pid: 2, windowToken: '10', bounds: { x: 10, y: 20, width: 300, height: 200 } };
+  const desktop = new Desktop({ electron: { screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1000, height: 800 } }), dipToScreenRect: (_, b) => b } } });
+  desktop.resolve = async () => target; desktop.native = async () => { throw new Error('constrained'); };
+  await assert.rejects(desktop.action({ action: 'maximize' }, { target }), /constrained/);
+  await assert.rejects(desktop.action({ action: 'restore' }, { target }), /No original/);
+  const original = target.bounds; desktop.native = async () => ({ ok: true });
+  await desktop.action({ action: 'maximize' }, { target });
+  target = { ...target, bounds: { x: 0, y: 0, width: 1000, height: 800 } };
+  await desktop.action({ action: 'maximize' }, { target });
+  desktop.native = async (_op, args) => { assert.deepEqual(args.bounds, original); };
+  await desktop.action({ action: 'restore' }, { target });
+});
+
+test('Windows coordinate guard retains physical bounds through fractional DIP rounding', { skip: process.platform !== 'win32' }, async () => {
+  const nativeBounds = { x: 101, y: 101, width: 501, height: 401 };
+  const desktop = new Desktop({ electron: { screen: { screenToDipRect: (_, b) => Object.fromEntries(Object.entries(b).map(([k,v]) => [k, Math.round(v / 1.25)])), dipToScreenPoint: p => p } } });
+  const target = desktop.normalizeWindow({ id: '1', pid: 2, windowToken: 'lifetime', bounds: nativeBounds });
+  desktop.resolve = async () => target;
+  desktop.native = async (_op, args) => { assert.deepEqual(args.expectedBounds, nativeBounds); assert.equal(args.windowToken, 'lifetime'); };
+  await desktop.action({ action: 'click', x: 150, y: 150 }, { target });
+});
+
 test('an initial ping captures the exact window even when app settings cover the screen', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'lolping-capture-'));
   const bounds = { x: 0, y: 0, width: 512, height: 512 }, target = { id: 'target', pid: 2, bounds };

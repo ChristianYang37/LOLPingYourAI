@@ -2,6 +2,7 @@ import { chooseEffort } from './effort.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
+import { codexLaunch } from './windows-launch.mjs';
 
 export class CodexAdapter extends EventEmitter {
   constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); this.models = new Map(); this.cancelEpoch = new Map(); this.effort = 0; }
@@ -14,7 +15,8 @@ export class CodexAdapter extends EventEmitter {
       if (key === 'env') { for (const [k, v] of Object.entries(value)) args.push('-c', `mcp_servers.lolpingyourai.env.${k}=${JSON.stringify(v)}`); }
       else args.push('-c', `mcp_servers.lolpingyourai.${key}=${JSON.stringify(value)}`);
     }
-    const child = this.child = spawn(this.command, args, { cwd: this.cwd, env: { ...process.env, ...this.mcp.env }, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+    const launch = codexLaunch(this.command);
+    const child = this.child = spawn(launch.command, [...launch.args, ...args], { cwd: this.cwd, env: { ...process.env, ...this.mcp.env, ...launch.env }, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
     child.stderr.on('data', data => this.emit('diagnostic', data.toString().slice(0, 3000)));
     child.stdin.on('error', () => {}); // Reported through the child's error/exit events.
     const detach = () => { if (this.child !== child) return false; this.child = null; this.ready = null; this.loaded.clear(); return true; };

@@ -2,14 +2,18 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const { writeFileSync, renameSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { join } = require('node:path');
+const { execFileSync } = require('node:child_process');
 app.setName('LOLPingYourAI Test Board');
 app.whenReady().then(() => {
   const win = new BrowserWindow({ width: 680, height: 520, x: 100, y: 100, title: 'LOLPingYourAI Test Board', webPreferences: { nodeIntegration: true, contextIsolation: false } });
+  const identity = process.platform === 'win32' ? JSON.parse(execFileSync(join(__dirname, '../native/desktop/build/desktop-helper.exe'), ['identify'], {
+    input: JSON.stringify({ id: win.getMediaSourceId().split(':')[1], pid: process.pid }), encoding: 'utf8', windowsHide: true,
+  })) : {};
   const instance = randomUUID(), path = process.env.LOLPINGAI_TEST_BOARD_FILE || join(app.getPath('temp'), 'lolping-test-board.json');
   let note = 'Ready for a ping.';
   const publish = () => {
     if (win.isDestroyed()) return;
-    const value = { kind: 'lolping-test-board', instance, pid: process.pid, windowId: win.getMediaSourceId().split(':')[1], bounds: win.getBounds(), value: note, time: Date.now() };
+    const value = { kind: 'lolping-test-board', instance, pid: process.pid, windowId: win.getMediaSourceId().split(':')[1], processStartedAt: identity.processStartedAt, windowToken: identity.windowToken, bounds: win.getBounds(), value: note, time: Date.now() };
     // A live heartbeat prevents a previous run's value/window ID from authorizing a new test.
     writeFileSync(`${path}.${instance}.tmp`, JSON.stringify(value), { mode: 0o600 });
     renameSync(`${path}.${instance}.tmp`, path);

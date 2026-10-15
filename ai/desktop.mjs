@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { squareRegion, windowAnchor, anchoredPoint } from './geometry.mjs';
 
@@ -9,21 +11,23 @@ export class Desktop {
   native(op, args = {}, signal) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) return reject(new Error('Desktop action cancelled'));
-      const child = spawn(this.helper, [op], { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+      const cooperative = process.platform === 'win32' && ['key', 'type', 'click', 'scroll'].includes(op);
+      const cancelDir = cooperative ? mkdtempSync(join(tmpdir(), 'lolping-input-')) : undefined;
+      const cancelFile = cancelDir && join(cancelDir, 'cancel');
+      const child = spawn(this.helper, [op], { stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
       let killTimer; const abort = () => {
-        // Windows terminates processes rather than delivering SIGTERM. Let its
-        // short input sequence release modifiers; the gate stays closed and
-        // cancellation remains unconfirmed until this child exits.
-        if (process.platform === 'win32' && ['key', 'type', 'click', 'scroll'].includes(op)) return;
+        // The helper checks between complete key strokes and releases held keys
+        // in finally. Never confirm cancellation before the process exits.
+        if (cooperative) { writeFileSync(cancelFile, 'cancel'); return; }
         child.kill(); killTimer = setTimeout(() => child.kill('SIGKILL'), 3000); };
       signal?.addEventListener('abort', abort, { once: true });
-      const cleanup = () => { clearTimeout(timer); clearTimeout(killTimer); signal?.removeEventListener('abort', abort); };
-      let output = '', error = ''; const timer = setTimeout(() => child.kill(), 15000);
+      const cleanup = () => { clearTimeout(timer); clearTimeout(killTimer); signal?.removeEventListener('abort', abort); if (cancelDir) rmSync(cancelDir, { recursive: true, force: true }); };
+      let output = '', error = ''; const timer = setTimeout(abort, 30000);
       child.stdin.on('error', e => { error ||= e.message; });
       child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { error += d; });
       child.on('error', e => { cleanup(); reject(e); });
       child.on('close', code => { cleanup(); if (signal?.aborted) return reject(new Error('Desktop action cancelled')); try { const data = JSON.parse(output); data.error || code ? reject(new Error(data.error ?? error)) : resolve(data); } catch { reject(new Error(error || `Desktop helper exited (${code})`)); } });
-      child.stdin.end(JSON.stringify({ ...args, excludePid: process.pid }));
+      child.stdin.end(JSON.stringify({ ...args, ...(cancelFile ? { cancelFile } : {}), excludePid: process.pid }));
     });
   }
   async doctor() { return { ...await this.native('doctor'), helper: this.helper }; }
@@ -31,9 +35,9 @@ export class Desktop {
   toNativePoint(p) { return process.platform === 'win32' ? this.electron.screen.dipToScreenPoint(p) : p; }
   normalizeWindow(w) {
     if (process.platform !== 'win32') return w;
-    return { ...w, bounds: this.electron.screen.screenToDipRect(null, w.bounds) };
+    return { ...w, nativeBounds: w.bounds, bounds: this.electron.screen.screenToDipRect(null, w.bounds) };
   }
-  async resolve(target) { return this.normalizeWindow(await this.native('resolve', { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt })); }
+  async resolve(target) { return this.normalizeWindow(await this.native('resolve', { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt, ...(target.windowToken ? { windowToken: target.windowToken } : {}) })); }
   async locate(point) { return windowAnchor(this.normalizeWindow(await this.native('target', this.toNativePoint(point))), point); }
   capture(pointOrTarget, size, tracked = false) {
     const job = this.captureTail.then(() => this.captureNow(pointOrTarget, size, tracked));
@@ -86,21 +90,23 @@ export class Desktop {
   }
   async action(args, context, signal) {
     const native = (op, args) => this.native(op, args, signal);
-    const target = await this.resolve(context.target), identity = { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt };
+    const target = await this.resolve(context.target), identity = { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt, ...(target.windowToken ? { windowToken: target.windowToken } : {}) };
     if (['click', 'scroll'].includes(args.action)) {
       if (![args.x, args.y].every(Number.isFinite)) throw new Error('x and y must be finite global logical coordinates');
       if (JSON.stringify(target.bounds) !== JSON.stringify(context.target.bounds)) throw new Error('Window moved. Take a fresh screenshot before acting.');
       if (args.x < target.bounds.x || args.x >= target.bounds.x + target.bounds.width || args.y < target.bounds.y || args.y >= target.bounds.y + target.bounds.height) throw new Error('Point is outside the target window');
-      return native(args.action, { ...identity, expectedBounds: process.platform === 'win32' ? this.electron.screen.dipToScreenRect(null, target.bounds) : target.bounds, ...this.toNativePoint({ x: args.x, y: args.y }), button: args.button, delta: Math.max(-2000, Math.min(2000, Number(args.delta) || 0)) });
+      return native(args.action, { ...identity, expectedBounds: process.platform === 'win32' ? target.nativeBounds ?? this.electron.screen.dipToScreenRect(null, target.bounds) : target.bounds, ...this.toNativePoint({ x: args.x, y: args.y }), button: args.button, delta: Math.max(-2000, Math.min(2000, Number(args.delta) || 0)) });
     }
     if (args.action === 'type') { if (typeof args.text !== 'string' || args.text.length > 10000) throw new Error('Invalid text'); return native('type', { ...identity, text: args.text }); }
     if (args.action === 'key') { if (typeof args.key !== 'string' || args.key.length > 50) throw new Error('Invalid key'); return native('key', { ...identity, key: args.key }); }
     if (['maximize', 'restore'].includes(args.action)) {
       let bounds;
-      const key = `${target.pid}:${target.processStartedAt ?? ""}:${target.id}`;
-      if (args.action === 'maximize') { if (!this.savedBounds.has(key)) this.savedBounds.set(key, target.bounds); bounds = this.electron.screen.getDisplayMatching(target.bounds).workArea; }
-      else { bounds = this.savedBounds.get(key); if (!bounds) throw new Error('No original window bounds saved'); }
-      const result = await native('resize', { ...identity, bounds: process.platform === 'win32' ? this.electron.screen.dipToScreenRect(null, bounds) : bounds });
+      const key = `${target.pid}:${target.processStartedAt ?? ""}:${target.id}:${target.windowToken ?? ""}`;
+      if (args.action === 'maximize') { bounds = this.electron.screen.getDisplayMatching(target.bounds).workArea; }
+      else { bounds = this.savedBounds.get(key)?.bounds; if (!bounds) throw new Error('No original window bounds saved'); }
+      const physical = args.action === 'restore' ? this.savedBounds.get(key)?.nativeBounds : undefined;
+      const result = await native('resize', { ...identity, bounds: process.platform === 'win32' ? physical ?? this.electron.screen.dipToScreenRect(null, bounds) : bounds });
+      if (args.action === 'maximize' && !this.savedBounds.has(key)) this.savedBounds.set(key, { bounds: target.bounds, nativeBounds: target.nativeBounds });
       if (args.action === 'restore') this.savedBounds.delete(key); return result;
     }
     throw new Error('Unknown desktop action');
