@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { existsSync, realpathSync } = require('node:fs');
 const { createRequire } = require('node:module');
-const { resolve, join, relative, isAbsolute, dirname } = require('node:path');
+const { resolve, join, relative, isAbsolute } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { execFileSync } = require('node:child_process');
 (async () => {
@@ -20,13 +20,13 @@ const { execFileSync } = require('node:child_process');
     return path;
   };
   const sdk = internal(req.resolve('@anthropic-ai/claude-agent-sdk'));
-  const cli = internal(join(dirname(sdk), 'cli.js'));
-  const version = execFileSync(process.execPath, [cli, '--version'], { timeout: 20000, encoding: 'utf8', windowsHide: true }).trim();
+  const binary = internal(req.resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude${process.platform === 'win32' ? '.exe' : ''}`));
+  const version = execFileSync(binary, ['--version'], { timeout: 20000, encoding: 'utf8', windowsHide: true }).trim();
   assert.match(version, /Claude Code/);
   assert.equal(typeof (await import(pathToFileURL(sdk).href)).query, 'function');
   internal(req.resolve('sharp'));
   const sharp = req('sharp');
   const png = await sharp({ create: { width: 2, height: 2, channels: 4, background: '#ffffff' } }).png().toBuffer();
   assert.equal((await sharp(png).metadata()).width, 2);
-  console.log(`Packaged SDK import, bundled CLI (${version}) and sharp passed`);
+  console.log(`Packaged SDK import, native CLI (${version}) and sharp passed`);
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
