@@ -35,6 +35,8 @@ export class ClaudeAdapter extends EventEmitter {
     const skill = await readFile(this.skillPath, 'utf8');
     const refuse = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
     const options = { cwd: this.cwd, systemPrompt: { type: 'preset', preset: 'claude_code', append: skill }, mcpServers: { lolpingyourai: this.mcp }, permissionMode: 'default', tools: contextTools,
+      // Only the project MCP server: claude.ai account connectors and user or project MCP servers never reach this teammate.
+      strictMcpConfig: true,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       // Hooks run before settings allow-rules, so a user's global allow list cannot widen this teammate's tools.
       hooks: { PreToolUse: [{ hooks: [async input => { const reason = toolPolicy(input.tool_name, input.tool_input ?? {}, this.cwd); return reason ? refuse(reason) : {}; }] }] },
