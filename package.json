@@ -64,6 +64,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
@@ -88,6 +94,9 @@
       "allowToChangeInstallationDirectory": true,
       "artifactName": "LOLPingYourAI-Setup-${version}.exe",
       "include": "build/installer.nsh"
+    },
+    "portable": {
+      "artifactName": "LOLPingYourAI-${version}-portable.exe"
     },
     "mac": {
       "target": [
