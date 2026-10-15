@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 
 const usage = `Usage: lolpingai <command> [json | --file payload.json]
 
+  models   Reload native models: '{"harness":"codex","refresh":true}'
   doctor   Desktop permissions and harness availability
   status   Configuration, sessions, wards and recent teammate events
   ping     Send a ping:        '{"signal":"missing","point":{"x":640,"y":400}}'
@@ -13,7 +14,7 @@ const usage = `Usage: lolpingai <command> [json | --file payload.json]
   stop     Interrupt the teammate and return control
 
 Talks only to the LOLPingYourAI app running on this machine.`;
-const commands = ['doctor', 'status', 'stop', 'bind', 'ping', 'config'];
+const commands = ['doctor', 'status', 'stop', 'bind', 'ping', 'config', 'models'];
 const [command = 'status', ...args] = process.argv.slice(2);
 const directory = process.env.LOLPINGAI_DATA_DIR ?? (process.platform === 'darwin' ? join(homedir(), 'Library/Application Support/LOLPingYourAI') : join(process.env.APPDATA ?? homedir(), 'LOLPingYourAI'));
 try {

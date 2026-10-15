@@ -12,13 +12,14 @@ export function TeammatePanel() {
   const [handoff, setHandoff] = useState(''), [description, setDescription] = useState(''), [candidates, setCandidates] = useState<any[]>([]), [permissions, setPermissions] = useState<any>();
   const [catalog, setCatalog] = useState<any>(), [modelLoading, setModelLoading] = useState(false), [modelRefresh, setModelRefresh] = useState(0);
   const [connection, setConnection] = useState<any>(), [reference, setReference] = useState<string>(), [customId, setCustomId] = useState(''), [checking, setChecking] = useState(false);
-  const refresh = async () => { try { setState(await call('status')); setCandidates(await call('candidates')); } catch (e) { setError(String(e)); } };
-  useEffect(() => { void refresh(); const off = window.teammateApi.onChange(() => void refresh()); const timer = setInterval(() => void refresh(), 3000); return () => { off(); clearInterval(timer); }; }, []);
+  const refresh = async () => { try { setState(await call('status')); } catch (e) { setError(String(e)); } };
+  useEffect(() => { void refresh(); const off = window.teammateApi.onChange(() => void refresh()); return () => { off(); }; }, []);
+  useEffect(() => { if (tab === 'emotes') void call('candidates').then(setCandidates).catch(e => setError(String(e))); }, [tab, notice]);
   useEffect(() => { if (!state) return; const m = state.config.mappings?.[signal] ?? state.signals[signal]; if (m) { setPrompt(m.prompt); setMode(m.mode); } }, [signal, Boolean(state), JSON.stringify(state?.config.mappings)]);
   useEffect(() => {
     const harness = state?.config.harness; if (!harness) return;
     let current = true; setCatalog(undefined); setModelLoading(true);
-    void call('models', { harness }).then(value => { if (current) setCatalog({ ...value, harness }); }).catch(e => { if (current) setError(String(e)); }).finally(() => { if (current) setModelLoading(false); });
+    void call('models', { harness, refresh: true }).then(value => { if (current) setCatalog({ ...value, harness }); }).catch(e => { if (current) setError(String(e)); }).finally(() => { if (current) setModelLoading(false); });
     return () => { current = false; };
   }, [state?.config.harness, modelRefresh]);
   const run = async (fn: () => Promise<unknown>, message = t('Saved', '已保存')) => { setError(''); try { await fn(); setNotice(message); await refresh(); } catch (e) { setError(String(e)); } };
@@ -36,7 +37,9 @@ export function TeammatePanel() {
       {selection.model && !currentCatalog?.models.some((m: any) => m.id === selection.model) && <option value={selection.model}>{selection.model} · {t('not in loaded list', '不在当前列表')}</option>}
       {currentCatalog?.models.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
     </select></label>
-    <button disabled={modelLoading} onClick={() => setModelRefresh(n => n + 1)}>{t('Reload models', '刷新模型')}</button>
+    <button disabled={modelLoading || state.busy} onClick={() => setModelRefresh(n => n + 1)}>{t('Reload models', '刷新模型')}</button>
+    <label>{t('Custom model ID (optional)', '自定义模型 ID（可选）')}<input key={`${cfg.harness}:${selection.model}`} defaultValue={selection.model} placeholder={t('Model ID configured in this harness', '填写已在此 harness 配置的模型 ID')} maxLength={500} onBlur={e => { const model = e.target.value.trim(); if (model !== selection.model) void saveSelection({ model, fastMode: false }); }} /></label>
+    <p>{t('Refresh reloads native configuration when idle. API credentials stay in the harness. Models added only in another shell/profile are not automatically shared with this app.', '空闲时刷新会重读原生配置，API 凭据仍由 harness 管理。在其他终端或 profile 中添加的模型不会自动共享到本应用。')}</p>
     <label className="ai-check"><input type="checkbox" checked={selection.fastMode} disabled={modelLoading || (!selectedModel?.fastMode && !selection.fastMode)} onChange={e => void saveSelection({ fastMode: e.target.checked })} />{t('Fast mode (off by default)', '快速模式（默认关闭）')}</label>
     <p>{t('Models come from the selected harness. Changes apply to the next turn; choosing a different model resets fast mode to off.', '模型来自所选 harness。更改从下一轮生效；更换模型会将快速模式重置为关闭。')}{currentCatalog && !selectedModel?.fastMode && ` ${t('This model/backend does not advertise fast mode.', '该模型／后端未提供快速模式。')}`}</p>
   </>;
@@ -51,7 +54,7 @@ export function TeammatePanel() {
         <div className="ai-grid">{[['regionSize', t('Focus square side', '区域边长'), 128, 2048, 32], ['wardHours', t('Ward delay (hours)', '回访等待（小时）'), .001, 168, .1]].map(([key, label, min, max, step]) => <label key={key}>{label}<input type="number" key={`${key}:${cfg[String(key)]}`} defaultValue={cfg[String(key)]} min={Number(min)} max={Number(max)} step={Number(step)} onBlur={e => { if (Number(e.target.value) !== cfg[String(key)]) void run(() => call('config', { [key]: Number(e.target.value) })); }} /></label>)}</div>
         <label className="ai-check"><input type="checkbox" checked={cfg.banter} onChange={e => void run(() => call('config', { banter: e.target.checked }))} />{t('Playful replies', '允许队友俏皮回敬')}</label>
         <p>{t('Option/Alt-drag: ping · Ctrl-drag: emote · Ctrl+Alt+Esc: emergency stop', 'Option/Alt 拖动：信号 · Ctrl 拖动：表情 · Ctrl+Alt+Esc：紧急停止')}</p>
-        <details><summary>{t('Connection & diagnostics', '连接与诊断')}</summary>{permissionsUI}<pre>{JSON.stringify({ session: state.sessions[cfg.harness], connection, selectedModel: selection.model || 'default', resolvedModel: state.effectiveModel, observedModel: state.observedModel, settingsAcknowledged: state.settingsAcknowledged }, null, 2)}</pre><button onClick={() => void run(() => call('config', { setupComplete: false }))}>{t('Run setup again', '重新设置')}</button></details>
+        <details><summary>{t('Connection & diagnostics', '连接与诊断')}</summary>{permissionsUI}{state.task?.timings && <div><h4>{t('Last request timing (ms)', '最近请求耗时（毫秒）')}</h4><p>{t('First text includes harness startup, tools and provider waiting; it is not pure model latency.', '首段文字耗时包含 harness 启动、工具调用与服务商等待，不等于纯模型耗时。')}</p><pre>{JSON.stringify(state.task.timings, null, 2)}</pre></div>}<pre>{JSON.stringify({ session: state.sessions[cfg.harness], connection, selectedModel: selection.model || 'default', resolvedModel: state.effectiveModel, observedModel: state.observedModel, settingsAcknowledged: state.settingsAcknowledged }, null, 2)}</pre><button onClick={() => void run(() => call('config', { setupComplete: false }))}>{t('Run setup again', '重新设置')}</button></details>
       </div>
       <div className="ai-card"><h3>{t('Task handoff', '绑定任务')}</h3><p>{t('Paste a goal, progress and next step once. Future pings continue this teammate conversation.', '填写一次目标、进度和下一步，之后的 ping 将继续这个队友会话。')}</p><textarea rows={3} value={handoff} onChange={e => setHandoff(e.target.value)} /><button disabled={!handoff.trim() || state.busy} onClick={() => void run(() => call('bind', { harness: cfg.harness, summary: handoff }))}>{t('Use this task', '使用此任务')}</button></div>
     </>}

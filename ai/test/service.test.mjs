@@ -281,3 +281,26 @@ test('Finish setup and signal mappings survive service restart', async () => {
   const restarted = new Teammate({ store: service.store, adapters: { codex: new Adapter() }, desktop: service.desktop }); await restarted.init();
   assert.equal(restarted.config.setupComplete, true); assert.deepEqual(restarted.config.mappings, mappings);
 });
+
+test('refresh never interrupts an active turn; pings queue during native config reload', async () => {
+  const { service, adapter } = await fixture(); await service.message({ text: 'Start' });
+  await assert.rejects(service.listModels({ refresh: true }), /Finish or stop/);
+  adapter.finish();
+  let release; adapter.listModels = () => new Promise(resolve => { release = resolve; });
+  const pending = service.listModels({ refresh: true });
+  assert.equal((await service.message({ text: 'Queued safely' })).queued, true);
+  assert.equal(adapter.sent.length, 1); assert.equal(adapter.cancelled.length, 0);
+  release({ models: [] }); await pending; await service.queue;
+  assert.equal(adapter.sent.length, 2); service.close();
+});
+
+test('Claude partial text appears before completion, complete message does not duplicate it', async () => {
+  const { service, time } = await fixture(); await service.configure({ harness: 'claude' });
+  const adapter = service.adapters.claude, turn = await service.message({ text: 'Hello' });
+  time(150); adapter.emit('event', { method: 'claude/textDelta', params: { threadId: turn.session, delta: 'Hello' } });
+  assert.equal(service.task.text, 'Hello'); assert.equal(service.task.timings.firstTextMs, 50);
+  adapter.emit('event', { method: 'claude/textComplete', params: { threadId: turn.session, streamedText: 'Hello', text: 'Hello there' } });
+  adapter.emit('event', { method: 'claude/message', params: { threadId: turn.session, type: 'assistant', textHandled: true, message: {content:[{type:'text',text:'Hello there'}]} } });
+  assert.equal(service.task.text, 'Hello there'); time(200); adapter.finish();
+  assert.equal(service.task.timings.totalMs, 100); service.close();
+});

@@ -63,6 +63,7 @@ test('Claude exposes only read-only context tools; hooks refuse everything else 
   await a.send(await a.create(), 'Question'); await completion(a);
   const { options } = sdk.calls[0];
   assert.deepEqual(options.tools, contextTools);
+  assert.equal(options.includePartialMessages, true);
   assert.deepEqual(Object.keys(options.mcpServers), ['lolpingyourai']);
   const hook = options.hooks.PreToolUse[0].hooks[0];
   assert.equal((await hook({ tool_name: 'Bash', tool_input: { command: 'ls' } })).hookSpecificOutput.permissionDecision, 'deny');
