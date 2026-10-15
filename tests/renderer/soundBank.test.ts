@@ -49,3 +49,25 @@ it('custom audio awaits playback, reloads after replacement, and tolerates missi
   await bank.playUrl(url, .1);
   expect(source.start).toHaveBeenCalledTimes(3);
 });
+
+it('does not resurrect an old custom sound when replacement races with decoding', async () => {
+  let finishOld!: (buffer: object) => void;
+  const start = vi.fn();
+  const source = { buffer: null, connect: vi.fn().mockReturnThis(), disconnect: vi.fn(), start, onended: null };
+  const decode = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+  vi.stubGlobal('AudioContext', class {
+    state = 'running'; destination = {};
+    decodeAudioData = decode;
+    createBufferSource = () => source;
+    createGain = () => ({ gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() });
+  });
+  vi.stubGlobal('fetch', async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) }));
+  const bank = new SoundBank();
+  const url = 'lolping://emotes/replaced.sound';
+  const loading = bank.load([{ key: url, url }]);
+  await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(1));
+  bank.forget('lolping://emotes/');
+  finishOld({ duration: 1 }); await loading;
+  await bank.play(url, .1);
+  expect(start).not.toHaveBeenCalled();
+});
