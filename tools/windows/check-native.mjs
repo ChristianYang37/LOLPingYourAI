@@ -17,6 +17,13 @@ lines.on('line', line => { const event = JSON.parse(line); if (event.input !== u
 fixture.on('exit', code => { for (const p of pending.splice(0)) p.reject(new Error(`Fixture exited ${code}`)); });
 const next = () => new Promise((resolve, reject) => pending.push({ resolve, reject }));
 const command = async (op, index = 0) => { const answer = next(); fixture.stdin.write(JSON.stringify({ op, index }) + '\n'); return answer; };
+// SendInput only queues events; a cross-thread Invoke can overtake their UI delivery.
+// Poll independent state without ever repeating the input operation.
+const values = async expected => {
+  let state;
+  for (let i = 0; i < 100; i++) { state = await command('read'); if (JSON.stringify(state.values) === JSON.stringify(expected)) return state; await new Promise(r => setTimeout(r, 20)); }
+  assert.deepEqual(state.values, expected); return state;
+};
 const desktop = new Desktop({ helper: resolve(process.env.LOLPINGAI_DESKTOP_HELPER || 'native/desktop/build/desktop-helper.exe') });
 let passed = 0;
 const check = async (name, fn) => { await fn(); console.log(`PASS ${++passed}: ${name}`); };
@@ -32,15 +39,13 @@ try {
     for (let n = 0; n < 20; n++) {
       const i = n % 2; await command('focus', i);
       await desktop.native('type', { ...identity(i), text: i ? 'B' : 'A' });
-      const state = await command('read');
-      assert.equal(state.values[0], 'A'.repeat(Math.floor(n / 2) + 1));
-      assert.equal(state.values[1], 'B'.repeat(Math.floor((n + 1) / 2)));
+      await values(['A'.repeat(Math.floor(n / 2) + 1), 'B'.repeat(Math.floor((n + 1) / 2))]);
     }
   });
   await check('Unicode input and Ctrl+A reach only the intended edit control', async () => {
     await command('focus'); await desktop.native('key', { ...identity(0), key: 'ctrl+a' });
     await desktop.native('type', { ...identity(0), text: 'Windows 中文 ✓' });
-    assert.deepEqual((await command('read')).values, ['Windows 中文 ✓', 'B'.repeat(10)]);
+    await values(['Windows 中文 ✓', 'B'.repeat(10)]);
   });
   await check('reused PID/birth and window lifetime markers are rejected', async () => {
     await assert.rejects(desktop.native('resolve', { ...identity(0), processStartedAt: '0' }), /process restarted/);

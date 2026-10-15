@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
-const { writeFileSync, renameSync } = require('node:fs');
+const { writeFileSync, renameSync, readFileSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { join } = require('node:path');
 const { execFileSync } = require('node:child_process');
@@ -10,10 +10,12 @@ app.whenReady().then(() => {
     input: JSON.stringify({ id: win.getMediaSourceId().split(':')[1], pid: process.pid }), encoding: 'utf8', windowsHide: true,
   })) : {};
   const instance = randomUUID(), path = process.env.LOLPINGAI_TEST_BOARD_FILE || join(app.getPath('temp'), 'lolping-test-board.json');
-  let note = 'Ready for a ping.';
+  let note = 'Ready for a ping.', focusToken;
   const publish = () => {
     if (win.isDestroyed()) return;
-    const value = { kind: 'lolping-test-board', instance, pid: process.pid, windowId: win.getMediaSourceId().split(':')[1], processStartedAt: identity.processStartedAt, windowToken: identity.windowToken, bounds: win.getBounds(), value: note, time: Date.now() };
+    // Optional runner focus control affects only this disposable fixture.
+    try { const token=readFileSync(`${path}.focus`, 'utf8'); if(token!==focusToken) { win.show(); win.moveTop(); win.focus(); focusToken=token; } } catch {}
+    const value = { kind: 'lolping-test-board', instance, pid: process.pid, windowId: win.getMediaSourceId().split(':')[1], processStartedAt: identity.processStartedAt, windowToken: identity.windowToken, bounds: win.getBounds(), focusToken, value: note, time: Date.now() };
     // A live heartbeat prevents a previous run's value/window ID from authorizing a new test.
     writeFileSync(`${path}.${instance}.tmp`, JSON.stringify(value), { mode: 0o600 });
     renameSync(`${path}.${instance}.tmp`, path);

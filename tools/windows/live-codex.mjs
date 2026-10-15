@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
-import { appendFile, readFile } from 'node:fs/promises';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { Bridge, drive, redactor, statusSummary } from '../acceptance/core.mjs';
 
 export async function liveCodex(directory) {
   const boardPath = join(directory, 'test-board.json'), evidence = join(directory, 'live-codex.jsonl');
   const env = { ...process.env, LOLPINGAI_TEST_BOARD_FILE: boardPath }; delete env.ELECTRON_RUN_AS_NODE;
-  const board = spawn(createRequire(import.meta.url)('electron'), [resolve('tools/test-board.cjs'), `--user-data-dir=${join(directory, 'board-profile')}`], { env, stdio: ['ignore', 'ignore', 'pipe'] });
+  const board = spawn(createRequire(import.meta.url)('electron'), [resolve('tools/test-board.cjs'), `--user-data-dir=${join(directory, 'board-profile')}`], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   let error = ''; board.stderr.on('data', d => error += d);
   const bridge = new Bridge(directory, { timeoutMs: 90000 }); const redact = redactor(); let writes = Promise.resolve();
   const log = value => { writes = writes.then(() => appendFile(evidence, redact({ time: Date.now(), ...value }) + '\n')); };
@@ -24,6 +24,10 @@ export async function liveCodex(directory) {
       { signal: 'danger', message: 'Only edit this disposable Test Board. Restore the textarea note to exactly Ready for a ping. Verify with a fresh screenshot.', after: 'done', expectText: 'Ready for a ping.', timeoutMs: 180000 },
     ];
     for (const step of steps) {
+      const token = String(Date.now()); await writeFile(`${boardPath}.focus`, token);
+      let focused = false;
+      for(let i=0;i<50;i++) { if(JSON.parse(await readFile(boardPath,'utf8')).focusToken===token) { focused=true;break; } await new Promise(r=>setTimeout(r,100)); }
+      assert.ok(focused, 'Test Board acknowledged focus request');
       await drive(bridge, { harness: 'codex', steps: [step] }, { boardPath, allowActions: true, log });
       console.log(`Real Codex Test Board: ${step.signal} passed`);
     }
