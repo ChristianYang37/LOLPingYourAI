@@ -97,6 +97,19 @@ At the time of the first local verification, no GitHub repository had been creat
 - Not verified live: no Claude credentials were available on the test machine (the SDK reported "Not logged in"), and Codex CLI was not installed there, so no model-driven turn was repeated for this revision. Earlier live Codex evidence above still describes the desktop loop.
 
 
+## macOS window identity regression — 2026-10-15
+
+- Exact CG window ID to AX identity replaces the rectangle-only match. Focus, hit-test and observed-bounds checks reject stale or ambiguous input; process launch markers remain attached to window identities.
+- Live Electron suite: 10/10 cases. Chrome: 30 alternating edits between identical overlapping windows. Safari: 10 alternating edits on the final helper. Both browsers passed stale/fresh movement, modal-input rejection with no deferred text after dismissal, original-text restoration and closed-window rejection. Some attempted runs safely stopped on focus changes; no zero-refusal or universal app-compatibility claim is made.
+- Independent PR checkout: 34 AI tests; 709 Vitest passes and one skip (seven helper cases passed after their missing build prerequisite was compiled); typecheck, native builds, production build, Apple Silicon DMG packaging and strict deep signature verification passed. No new SHA-256 check. The installed app was not replaced.
+- See [window identity design and test evidence](window-identity.md) for reproduction, discovered browser issues, private-SPI dependency, conservative refusals and untested boundaries.
+
+
+## Owner-supplied logo — 2026-10-15
+
+- Preserved the supplied 1254×1254 PNG as `build/icon.png`; both language READMEs display it. Generated Windows ICO frames at 16, 24, 32, 48, 64, 128 and 256 pixels and decoded every frame successfully.
+- Packaged the same logo for the settings/window icon on both platforms; Windows tray branding uses it too. macOS retains the existing monochrome menu-bar status glyphs. Updated artwork attribution.
+- Typecheck, 26 existing window/tray tests and production build passed after the change. Rebuilt the Apple Silicon DMG, passed strict deep signature verification, and visually inspected the icon extracted from the final app's ICNS. The installed app was not replaced.
 ## Signed-in Claude run — 2026-10-15
 
 First authenticated Claude run of the [acceptance script](acceptance.md) on the packaged Apple Silicon app with the Test Board: steps 1–5, and the parts of steps 6–8 that a person did by hand. Apple Silicon, macOS 27.0.1, Node 26.10, Electron 44.5.1, Agent SDK 0.3.300 with its bundled Claude Code 2.1.300, model `claude-opus-5-5` (the SDK default), claude.ai subscription login. The app was started with a clean environment. Scripted pings went through the local bridge (the CLI path) at a point over the note, and a person also pinged by hand with both wheels; every action and reply came from the model.

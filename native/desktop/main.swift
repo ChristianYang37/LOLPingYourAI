@@ -21,24 +21,10 @@ func windows(_ exclude: Int32) -> [[String: Any]] {
               (w[kCGWindowLayer as String] as? Int) == 0,
               let b = w[kCGWindowBounds as String] as? [String: Any], number(b, "Width") > 1, number(b, "Height") > 1,
               let id = w[kCGWindowNumber as String] as? NSNumber else { return nil }
-        return ["id": id.stringValue, "pid": pid, "app": w[kCGWindowOwnerName as String] ?? "", "title": w[kCGWindowName as String] ?? "", "bounds": ["x": number(b, "X"), "y": number(b, "Y"), "width": number(b, "Width"), "height": number(b, "Height")]]
+        var result: [String: Any] = ["id": id.stringValue, "pid": pid, "app": w[kCGWindowOwnerName as String] ?? "", "title": w[kCGWindowName as String] ?? "", "bounds": ["x": number(b, "X"), "y": number(b, "Y"), "width": number(b, "Width"), "height": number(b, "Height")]]
+        if let launched = NSRunningApplication(processIdentifier: pid)?.launchDate { result["processStartedAt"] = launched.timeIntervalSince1970 }
+        return result
     }
-}
-func axWindow(_ w: [String: Any]) -> AXUIElement {
-    let app = AXUIElementCreateApplication(Int32(number(w, "pid")))
-    var value: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success, let items = value as? [AXUIElement], let bounds = w["bounds"] as? [String: Any] else { fail("Cannot access target window; grant Accessibility") }
-    let matches = items.filter { item in
-        var p: CFTypeRef?, s: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(item, kAXPositionAttribute as CFString, &p) == .success,
-              AXUIElementCopyAttributeValue(item, kAXSizeAttribute as CFString, &s) == .success else { return false }
-        var point = CGPoint.zero; var size = CGSize.zero
-        guard let pv = p, let sv = s, CFGetTypeID(pv) == AXValueGetTypeID(), CFGetTypeID(sv) == AXValueGetTypeID() else { return false }
-        AXValueGetValue(pv as! AXValue, .cgPoint, &point); AXValueGetValue(sv as! AXValue, .cgSize, &size)
-        return abs(point.x - number(bounds, "x")) < 3 && abs(point.y - number(bounds, "y")) < 3 && abs(size.width - number(bounds, "width")) < 3 && abs(size.height - number(bounds, "height")) < 3
-    }
-    guard matches.count == 1 else { fail("Target window is missing or ambiguous") }
-    return matches[0]
 }
 let op = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "doctor"
 let data = FileHandle.standardInput.readDataToEndOfFile()
@@ -48,7 +34,7 @@ var result: Any = ["ok": true]
 let session = CGSessionCopyCurrentDictionary() as? [String: Any]
 let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
 if op == "doctor" {
-    result = ["accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess(), "locked": locked, "platform": "darwin"]
+    result = ["accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess(), "locked": locked, "platform": "darwin", "exactWindowIdentity": exactWindowIdentityAvailable, "windowIdentityBackend": "macOS-AX-window-ID-SPI"]
 } else if op == "cursor" {
     let p = CGEvent(source: nil)?.location ?? .zero; result = ["x": p.x, "y": p.y]
 } else if op == "windows" { result = windows(exclude)
@@ -61,24 +47,55 @@ if op == "doctor" {
         result = w
     } else {
         guard let id = args["id"] as? String, let w = all.first(where: { ($0["id"] as? String) == id && number($0, "pid") == number(args, "pid") }) else { fail("Target window closed or changed") }
+        if let expected = args["processStartedAt"] as? NSNumber {
+            guard let current = w["processStartedAt"] as? NSNumber, current == expected else { fail("Target process restarted; select the window again") }
+        }
         if op == "resolve" { result = w }
         else {
             guard AXIsProcessTrusted() else { fail("Accessibility permission is required") }
+            if op == "click" || op == "scroll" { requireExpectedBounds(w, args) }
             let ax = axWindow(w)
-            let targetApp = NSRunningApplication(processIdentifier: Int32(number(w, "pid")))
-            targetApp?.activate(options: [.activateIgnoringOtherApps])
-            guard AXUIElementPerformAction(ax, kAXRaiseAction as CFString) == .success else { fail("Cannot focus target window") }
-            let deadline = Date().addingTimeInterval(0.7)
-            while NSWorkspace.shared.frontmostApplication?.processIdentifier != Int32(number(w, "pid")) && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
-            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == Int32(number(w, "pid")) else { fail("Target did not acquire foreground control") }
+            guard !hasModalSurface(ax), !hasAppModalWindow(Int32(number(w, "pid"))) else { fail("Target window has a modal dialog; resolve it before continuing") }
+            if !hasTargetFocus(ax, Int32(number(w, "pid"))) {
+                let targetApp = NSRunningApplication(processIdentifier: Int32(number(w, "pid")))
+                targetApp?.activate(options: [])
+                guard AXUIElementPerformAction(ax, kAXRaiseAction as CFString) == .success else { fail("Cannot focus target window") }
+            }
+            // WebKit can publish the focused window before its input focus has settled.
+            let needsInputFocus = op == "type" || op == "key"
+            let deadline = Date().addingTimeInterval(1.0)
+            var stableSince: Date?
+            repeat {
+                if hasTargetFocus(ax, Int32(number(w, "pid")), requireInput: needsInputFocus) { if stableSince == nil { stableSince = Date() } }
+                else { stableSince = nil }
+                if let since = stableSince, Date().timeIntervalSince(since) >= 0.12 { break }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+            } while Date() < deadline
+            guard let since = stableSince, Date().timeIntervalSince(since) >= 0.12 else { fail("Target focus did not settle (\(lastFocusFailure)); click the intended control and observe again") }
+            requireTargetFocus(ax, w, input: needsInputFocus)
+            guard let fresh = windows(exclude).first(where: { ($0["id"] as? String) == w["id"] as? String && number($0, "pid") == number(w, "pid") }) else { fail("Target window closed or changed") }
             if op == "resize" {
                 guard let b = args["bounds"] as? [String: Any] else { fail("Missing window bounds") }
                 var point = CGPoint(x: number(b, "x"), y: number(b, "y")); var size = CGSize(width: number(b, "width"), height: number(b, "height"))
                 let p = AXValueCreate(.cgPoint, &point)!, s = AXValueCreate(.cgSize, &size)!
-                guard AXUIElementSetAttributeValue(ax, kAXPositionAttribute as CFString, p) == .success, AXUIElementSetAttributeValue(ax, kAXSizeAttribute as CFString, s) == .success else { fail("This window cannot be resized") }
+                guard AXUIElementSetAttributeValue(ax, kAXSizeAttribute as CFString, s) == .success else { fail("This window cannot be resized") }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+                guard AXUIElementSetAttributeValue(ax, kAXPositionAttribute as CFString, p) == .success else { fail("This window cannot be moved") }
+                let resizeDeadline = Date().addingTimeInterval(0.7)
+                var reached = false
+                repeat {
+                    if let actual = windows(exclude).first(where: { ($0["id"] as? String) == id })?["bounds"] as? [String: Any] {
+                        reached = ["x", "y", "width", "height"].allSatisfy { abs(number(actual, $0) - number(b, $0)) < 2 }
+                    }
+                    if !reached { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+                } while !reached && Date() < resizeDeadline
+                guard reached else { fail("Window did not reach requested bounds; inspect its current size and position") }
             } else if op == "click" || op == "scroll" {
-                let p = CGPoint(x: number(args, "x"), y: number(args, "y")); let b = w["bounds"] as! [String: Any]
+                requireExpectedBounds(fresh, args)
+                let p = CGPoint(x: number(args, "x"), y: number(args, "y")); let b = fresh["bounds"] as! [String: Any]
                 guard CGRect(x: number(b, "x"), y: number(b, "y"), width: number(b, "width"), height: number(b, "height")).contains(p) else { fail("Action is outside the target window") }
+                requireTargetAtPoint(ax, p)
+                requireTargetFocus(ax, w, input: needsInputFocus)
                 if op == "click" {
                     let right = (args["button"] as? String) == "right"
                     CGEvent(mouseEventSource: nil, mouseType: right ? .rightMouseDown : .leftMouseDown, mouseCursorPosition: p, mouseButton: right ? .right : .left)?.post(tap: .cghidEventTap)
@@ -91,6 +108,7 @@ if op == "doctor" {
                 let text = Array((args["text"] as? String ?? "").utf16)
                 guard text.count <= 10000 else { fail("Text is too long") }
                 for start in stride(from: 0, to: text.count, by: 100) {
+                    requireTargetFocus(ax, w, input: needsInputFocus)
                     let chunk = Array(text[start..<min(start + 100, text.count)])
                     let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)!, up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)!
                     chunk.withUnsafeBufferPointer { down.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: $0.baseAddress!); up.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: $0.baseAddress!) }
@@ -107,10 +125,17 @@ if op == "doctor" {
                     guard let modifier = modifiers[name] else { fail("Unsupported key modifier") }
                     held.append(modifier)
                 }
-                for (key, flag) in held { flags.insert(flag); postInput(CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: true)!, flags: flags) }
-                postInput(CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)!, flags: flags)
-                postInput(CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false)!, flags: flags)
-                for (key, flag) in held.reversed() { flags.remove(flag); postInput(CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: false)!, flags: flags) }
+                requireTargetFocus(ax, w, input: needsInputFocus)
+                let selectedWithAX = last == "a" && held.count == 1 && held[0].1 == .maskCommand && selectAllEditableText(ax, Int32(number(w, "pid")))
+                result = ["ok": true, "inputBackend": selectedWithAX ? "accessibility" : "keyboard"]
+                if !selectedWithAX {
+                    for (key, flag) in held { flags.insert(flag); postInput(CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: true)!, flags: flags) }
+                    let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)!
+                    let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false)!
+                    postInput(down, flags: flags)
+                    postInput(up, flags: flags)
+                    for (key, flag) in held.reversed() { flags.remove(flag); postInput(CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: false)!, flags: flags) }
+                }
 
             } else { fail("Unknown desktop operation") }
         }
