@@ -1,7 +1,9 @@
 node_modules/
 out/
 dist/
-release/
+release/*
+!release/README.md
+!release/SHA256SUMS
 site-dist/
 native/hook-helper/build/
 *.log
