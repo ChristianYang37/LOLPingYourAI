@@ -50,7 +50,13 @@ async function launch(expected, change) {
     socket.send(JSON.stringify({ id: ++id, method: 'Runtime.evaluate', params: { expression: `setImmediate(()=>${electron}.app.quit()); true` } }));
     socket.close();
     assert.equal(await exit, 0, 'App quits cleanly');
-  } finally { clearTimeout(watchdog); socket?.terminate(); if (!exited) child.kill(); }
+  } finally {
+    if (!exited && socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ id: 999999, method: 'Runtime.evaluate', params: { expression: "setImmediate(()=>process.mainModule.require('electron').app.quit()); true" } }));
+      socket.close(); await Promise.race([exit, sleep(5000)]);
+    }
+    clearTimeout(watchdog); socket?.terminate(); if (!exited) child.kill();
+  }
 }
 await launch(512, 640); await launch(640);
 console.log('Actual packaged app: renderer, isolated profile, skill installation, config persistence and graceful restart passed');

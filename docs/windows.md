@@ -42,7 +42,11 @@ Ten native regression groups passed locally: 20 alternating edits to identical o
 
 The first fixture run failed because .NET Framework multiline TextBox has no default Ctrl+A handler. The fixture now implements that shortcut and independently reads both textboxes; production input code was not changed to disguise that fixture difference.
 
-Local automated evidence: 411 C++ checks; TypeScript checking; 712 Vitest tests; AI/acceptance protocol tests; real production renderer smoke; two reverse pings visible at 4.2 seconds and ending around 6.15 seconds; packaged SDK/Claude CLI/sharp; actual packaged renderer, copied skill, isolated profile, persisted config, clean quit and restart.
+Local automated evidence: 411 C++ checks; TypeScript checking; 712 Vitest tests; 76 AI tests and 21 acceptance protocol tests; real production renderer smoke; two reverse pings visible at 4.2 seconds and ending around 6.15 seconds; packaged SDK/Claude CLI/sharp; actual packaged renderer, copied skill, isolated profile, persisted config, clean quit and restart. Full NSIS install/start/restart/uninstall also passed locally in a temporary path containing spaces.
+
+Real packaged-app Codex acceptance passed with the locally authenticated `gpt-6.1-sol`, effort `low`, fast mode off: observe the Test Board and reverse-ping, replace its note with `Ping received.`, then use Danger to restore `Ready for a ping.`. Each completed step independently read the actual fixture text. The app then exited cleanly and restarted. This establishes completed correction, not mid-turn model cancellation or model session resumption after restart.
+
+Failure history is retained: the first real edit was refused when Windows did not grant foreground control, and the model requested the user focus the board. The fixture now requests focus before each test step. A subsequent attempt typed `Ping received` without the period because the unquoted instruction was ambiguous; the test now quotes the exact string including punctuation. Neither failure is counted as a successful run. The first CI attempt also read the edit control before queued input was delivered; independent readback now waits up to two seconds without resending input.
 
 ## CI and release
 

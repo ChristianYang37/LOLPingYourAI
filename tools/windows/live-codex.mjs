@@ -20,8 +20,8 @@ export async function liveCodex(directory) {
     await bridge.call('config', { harness: 'codex', setupComplete: true });
     const steps = [
       { signal: 'missing', message: 'Describe only this disposable Test Board, including its note. Send one onmyway reply ping. Do not edit anything.', after: 'done', expectText: 'Ready for a ping.', timeoutMs: 180000 },
-      { signal: 'assist', message: 'Only edit this disposable Test Board. Replace the textarea note with exactly Ping received. Verify it with a fresh screenshot.', after: 'done', expectText: 'Ping received.', timeoutMs: 180000 },
-      { signal: 'danger', message: 'Only edit this disposable Test Board. Restore the textarea note to exactly Ready for a ping. Verify with a fresh screenshot.', after: 'done', expectText: 'Ready for a ping.', timeoutMs: 180000 },
+      { signal: 'assist', message: 'Only edit this disposable Test Board. Replace the textarea note with this exact string, including the final period: "Ping received." Verify it with a fresh screenshot.', after: 'done', expectText: 'Ping received.', timeoutMs: 180000 },
+      { signal: 'danger', message: 'Only edit this disposable Test Board. Restore the textarea note to this exact string, including the final period: "Ready for a ping." Verify with a fresh screenshot.', after: 'done', expectText: 'Ready for a ping.', timeoutMs: 180000 },
     ];
     for (const step of steps) {
       const token = String(Date.now()); await writeFile(`${boardPath}.focus`, token);
