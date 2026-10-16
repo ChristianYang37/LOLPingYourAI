@@ -98,7 +98,8 @@ export class Teammate extends EventEmitter {
         if (this.task) { this.task.error = error.message; this.task.errorCode = error.code; }
         if (error.code === 'SESSION_WRITER_CONFLICT') await this.recordWriterConflict(event.harness, error);
         this.phase('error'); await this.conversation.flush(); this.notice(error.message);
-      } finally { this.handlingFailure = false; this.emit('change'); }
+      } catch (saveError) { this.phase('error'); this.notice(`Could not persist session recovery state: ${saveError.message}`); }
+      finally { this.handlingFailure = false; this.emit('change'); }
     });
     void this.queue.then(() => this.pump(), error => this.notice(error.message));
     return job;
@@ -264,8 +265,10 @@ export class Teammate extends EventEmitter {
     try {
       await adapter.resume(sessionId, { force: true });
       if (generation !== this.generation || this.sessions[harness] !== session) throw new Error('Session recovery was cancelled; retry when ready');
+      const conflict = session.writerConflict;
       delete session.writerConflict;
-      await this.saveSessions();
+      try { await this.saveSessions(); }
+      catch (error) { session.writerConflict = conflict; throw error; }
       if (this.context?.harness === harness && this.task?.errorCode === 'SESSION_WRITER_CONFLICT') {
         this.task = null; this.context = null; // Keep the failed entry intact as historical evidence.
       }

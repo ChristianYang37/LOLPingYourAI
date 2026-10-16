@@ -457,3 +457,21 @@ test('writer conflict at turn start stops queued desktop intentions without dele
   assert.match(service.conversation.rows.find(r => r.id === queued.id).error, /Not sent/);
   assert.equal(adapter.next, 1); assert.equal(service.gate.allowed, false);
 });
+
+test('failed persistence retains the recovery state and does not poison later retries', async () => {
+  const { service, adapter } = await conflicted();
+  const write = service.store.write; service.store.write = async () => { throw new Error('disk full'); };
+  adapter.resume = async id => id;
+  await assert.rejects(service.recoverSession({ harness: 'codex', sessionId: 'session-1' }), /disk full/);
+  assert.ok(service.sessions.codex.writerConflict); assert.equal(service.busy(), false);
+  service.store.write = write;
+  assert.equal((await service.recoverSession({ harness: 'codex', sessionId: 'session-1' })).recovered, true);
+  adapter.resume = async id => { throw writerConflict(id); };
+  const save = service.saveSessions;
+  service.saveSessions = async () => { if (service.sessions.codex.writerConflict) throw new Error('disk full'); return save.call(service); };
+  await assert.rejects(service.dispatch({ signal: 'chat', message: 'retry' }), /active writer/);
+  await service.queue;
+  assert.equal(service.busy(), false); assert.ok(service.sessions.codex.writerConflict);
+  service.saveSessions = save; adapter.resume = async id => id;
+  assert.equal((await service.recoverSession({ harness: 'codex', sessionId: 'session-1' })).recovered, true);
+});
