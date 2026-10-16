@@ -249,3 +249,6 @@ pnpm dist                                       # Windows x64 安装包（需在
 英雄联盟的美术、动画和音效 © Riot Games, Inc.，**不**适用 MIT 许可，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。这是独立的粉丝项目，未获 Riot Games、OpenAI 或 Anthropic 认可。
 
 连接与诊断默认关闭；需要排查时，在设置 → AI 队友中显式开启。关闭后不收集原始协议事件，聊天与信号记录正常保留。性能 CI 的范围、预算及本机测量见[性能测试说明](docs/performance.md)。
+
+
+[贡献与 PR 流程](CONTRIBUTING.zh-CN.md) · [发布流程](docs/releasing.md)

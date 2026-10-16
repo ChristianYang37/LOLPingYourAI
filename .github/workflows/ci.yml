@@ -1,7 +1,7 @@
 name: Build and test
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_call:
   workflow_dispatch:
@@ -64,7 +64,7 @@ jobs:
       - run: pnpm exec electron tools/check-agent-pings.cjs
       - run: pnpm exec electron tools/check-upstream-interactions.cjs
       - if: runner.os == 'macOS'
-        run: pnpm exec electron-builder --mac --dir --publish never
+        run: pnpm exec electron-builder --mac --arm64 --publish never --config.extraMetadata.buildCommit=${{ github.sha }}
       - if: runner.os == 'Windows'
         run: pnpm exec electron-builder --win --publish never --config.extraMetadata.buildCommit=${{ github.sha }}
       - run: node tools/check-packaged-runtime.cjs release
@@ -99,3 +99,20 @@ jobs:
           path: release/LOLPingYourAI-Setup-*.exe
           if-no-files-found: error
           retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: installer-macos-arm64
+          path: release/LOLPingYourAI-*-arm64.dmg
+          if-no-files-found: error
+          retention-days: 14
+  required:
+    name: Required checks
+    if: always()
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every platform to pass
+        env:
+          RESULT: ${{ needs.check.result }}
+        run: test "$RESULT" = success
