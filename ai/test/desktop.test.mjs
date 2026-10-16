@@ -151,3 +151,13 @@ test('pause aborts a running native helper and refuses queued input until its ex
   await started; gate.pause(); await Promise.all([rejected, queued, gate.idle()]);
   await rm(dir, { recursive: true, force: true });
 });
+
+test('desktop actions hide the companion through native validation and restore on rejection', async () => {
+  let hidden = false;
+  const target = { id: '1', pid: 2, bounds: { x: 0, y: 0, width: 300, height: 300 } };
+  const desktop = new Desktop({ electron: { screen: { dipToScreenPoint: p => p, dipToScreenRect: (_, b) => b } }, withoutCompanion: async fn => { hidden = true; try { return await fn(); } finally { hidden = false; } } });
+  desktop.resolve = async () => { assert.equal(hidden, true); return target; };
+  desktop.native = async () => { assert.equal(hidden, true); throw Error('Other window covers target'); };
+  await assert.rejects(desktop.action({ action: 'scroll', x: 100, y: 100, delta: -405 }, { target }), /Other window/);
+  assert.equal(hidden, false);
+});

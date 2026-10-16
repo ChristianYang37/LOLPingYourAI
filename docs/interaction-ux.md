@@ -23,3 +23,5 @@ Prompt: “Use case: stylized-concept. Asset type: a single compact transparent 
 ## Verification cases
 
 Automated service cases cover navigation versus mutation, forced read-only wards, repeated questions versus different windows, emotion-only reactions, initial/latest capture separation and stale-context cancellation. Preview tests cover arbitrary paths, unknown files, expiration and symlink escape. Electron fixtures exercise rendered math/code, screenshot preview and working state. Record the actual run results and real harness limitations in release notes; prompt quality cannot be proved by protocol mocks alone.
+
+During desktop actions the companion card briefly hides so it cannot cover the target point. It restores after success or failure unless dismissed; overlapping screenshots share the same visibility guard. Other applications are still checked for occlusion. Scroll delta is positive upwards and negative downwards; agents must verify visible movement.
