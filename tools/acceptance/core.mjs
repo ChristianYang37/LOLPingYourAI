@@ -139,13 +139,13 @@ export async function drive(bridge, plan, { boardPath, allowActions = false, log
     if (s.config?.harness !== plan.harness) throw new Error('Select the plan harness in app settings before running');
     const mapping = s.config?.mappings?.[step.signal] ?? s.signals?.[step.signal];
     if (!mapping) throw new Error(`Unknown signal: ${step.signal} (Question uses missing)`);
-    if (!['observe', 'emotion', 'execute', 'interrupt', 'stop'].includes(mapping.mode)) throw new Error('Place/cancel wards manually and use the ward watcher');
-    if (mapping.mode !== 'observe' && !allowActions) throw new Error('Non-observation steps require --allow-actions');
+    if (!['observe', 'explore', 'emotion', 'execute', 'interrupt', 'stop'].includes(mapping.mode)) throw new Error('Place/cancel wards manually and use the ward watcher');
+    if (mapping.mode !== 'observe' && !(mapping.mode === 'explore' && step.observeOnly === true) && !allowActions) throw new Error('Non-observation steps require --allow-actions');
     if (s.busy && (!previousId || s.context?.id !== previousId || !['interrupt', 'stop'].includes(mapping.mode))) throw new Error('Another turn is active; refusing to queue or interrupt it');
     if (mapping.mode === 'stop' && !matchesBoard(s.context?.target, board)) throw new Error('Stop must belong to this Test Board');
     const id = randomUUID();
     try {
-    const sent = await bridge.call('ping', { id, harness: plan.harness, signal: step.signal, message: step.message, target: boardTarget(board) });
+    const sent = await bridge.call('ping', { id, harness: plan.harness, signal: step.signal, message: step.message, ...(step.observeOnly === true ? { observeOnly: true } : {}), target: boardTarget(board) });
     if (sent.queued || sent.superseded || sent.duplicate || sent.ignored || sent.delivered && sent.contextId !== id) throw new Error('Ping was not admitted as an isolated test turn');
     log({ kind: 'ping', id, signal: step.signal });
     await poll(left => bridge.call('status', {}, left), async current => {

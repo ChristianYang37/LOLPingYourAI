@@ -37,7 +37,7 @@ The updated board publishes its PID, native window ID, unique instance, logical 
 
 ## Editing, correction and stopping
 
-Non-observation steps require `--allow-actions`. For example, save this locally as a plan, then use `drive --plan <path> --allow-actions`:
+Question now defaults to exploration. The observation example explicitly sets `observeOnly: true`, enforced by the bridge; navigation tests and other non-observation steps require `--allow-actions`. For example, save this locally as a plan, then use `drive --plan <path> --allow-actions`:
 
 ```json
 {
