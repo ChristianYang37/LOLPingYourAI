@@ -29,10 +29,11 @@ async function launch(expected, change) {
     socket = new WebSocket(inspector); await new Promise((r,j) => { socket.once('open', r); socket.once('error', j); });
     let id = 0; const pending = new Map();
     socket.on('message', raw => { const m = JSON.parse(raw); if (pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
-    const evaluate = async expression => {
+    const evaluate = async (expression, { allowExit = false } = {}) => {
       const current = ++id; const answer = new Promise(r => pending.set(current, r));
       socket.send(JSON.stringify({ id: current, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }));
-      const response = await Promise.race([answer, exit.then(() => { throw new Error('App exited during inspection'); })]);
+      const response = await Promise.race([answer, exit.then(() => { if (allowExit) return null; throw new Error('App exited during inspection'); })]);
+      if (response === null) return null; // app.quit may exit before the inspector reply.
       assert.ok(!response.error && !response.result.exceptionDetails, JSON.stringify(response));
       return response.result.result.value;
     };
@@ -60,17 +61,17 @@ async function launch(expected, change) {
     }
     if (change) await call('config', { regionSize: change });
     if (change && liveHarness) await (await import('./live-codex.mjs')).liveCodex(directory, liveHarness);
-    // Wait for the inspector to acknowledge the quit request before detaching.
-    // Leave a short interval for the response; cleanup still runs through app.quit.
+    // Invoke quit inside the evaluated request, not an inspector-created timer.
+    // A real exit may beat the reply; either way the exit code below must be zero.
     phase = 'quit request';
-    assert.equal(await evaluate(`setTimeout(()=>${electron}.app.quit(), 100); true`), true);
+    await evaluate(`${electron}.app.prependOnceListener('before-quit',()=>console.error('[smoke] before-quit')); console.error('[smoke] invoking app.quit'); ${electron}.app.quit(); console.error('[smoke] app.quit returned'); true`, { allowExit: true });
     phase = 'graceful exit';
     socket.close();
     const code = await exit;
     assert.equal(code, 0, `App quits cleanly (phase=${phase}, signal=${exitSignal}, watchdog=${timedOut}, elapsed=${Date.now() - started}ms)\n${stderr.slice(-8000)}\n${stdout}`);
   } finally {
     if (!exited && socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ id: 999999, method: 'Runtime.evaluate', params: { expression: "setImmediate(()=>process.mainModule.require('electron').app.quit()); true" } }));
+      socket.send(JSON.stringify({ id: 999999, method: 'Runtime.evaluate', params: { expression: "process.mainModule.require('electron').app.quit(); true" } }));
       socket.close(); await Promise.race([exit, sleep(5000)]);
     }
     clearTimeout(watchdog); socket?.terminate(); if (!exited) child.kill();
