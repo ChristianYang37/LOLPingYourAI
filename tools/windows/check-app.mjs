@@ -17,11 +17,12 @@ async function launch(expected, change) {
   const env = { ...process.env, LOLPINGAI_DATA_DIR: directory }; delete env.ELECTRON_RUN_AS_NODE;
   if (process.argv.includes('--dsh-protocol')) env.DSH_HOME = join(directory, 'dsh-home');
   const child = spawn(executable, ['--inspect=127.0.0.1:0'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let stderr = '', inspector, exited = false, socket;
-  const exit = new Promise(r => child.on('exit', code => { exited = true; r(code); }));
+  let stderr = '', stdout = '', inspector, exited = false, socket, phase = 'startup', exitSignal, timedOut = false;
+  const started = Date.now();
+  const exit = new Promise(r => child.on('exit', (code, signal) => { exited = true; exitSignal = signal; r(code); }));
   child.stderr.on('data', data => { stderr += data; inspector ??= stderr.match(/ws:\/\/127\.0\.0\.1:\d+\/[^\s]+/)?.[0]; });
-  child.stdout.resume();
-  const watchdog = setTimeout(() => child.kill(), liveHarness ? 660000 : 60000);
+  child.stdout.on('data', data => { stdout = (stdout + data).slice(-8000); });
+  const watchdog = setTimeout(() => { timedOut = true; console.error(`App watchdog: phase=${phase}, expected=${expected}, elapsed=${Date.now() - started}ms`); child.kill(); }, liveHarness ? 660000 : 60000);
   const wait = async fn => { for (let i = 0; i < 200; i++) { if (exited) throw new Error(`App exited: ${stderr.slice(-2000)}`); const value = await fn(); if (value) return value; await sleep(100); } throw new Error('Packaged app readiness timed out'); };
   try {
     await wait(() => inspector);
@@ -59,10 +60,14 @@ async function launch(expected, change) {
     }
     if (change) await call('config', { regionSize: change });
     if (change && liveHarness) await (await import('./live-codex.mjs')).liveCodex(directory, liveHarness);
-    // Graceful app quit runs bridge, harness and hook cleanup.
-    socket.send(JSON.stringify({ id: ++id, method: 'Runtime.evaluate', params: { expression: `setImmediate(()=>${electron}.app.quit()); true` } }));
+    // Wait for the inspector to acknowledge the quit request before detaching.
+    // Leave a short interval for the response; cleanup still runs through app.quit.
+    phase = 'quit request';
+    assert.equal(await evaluate(`setTimeout(()=>${electron}.app.quit(), 100); true`), true);
+    phase = 'graceful exit';
     socket.close();
-    assert.equal(await exit, 0, 'App quits cleanly');
+    const code = await exit;
+    assert.equal(code, 0, `App quits cleanly (phase=${phase}, signal=${exitSignal}, watchdog=${timedOut}, elapsed=${Date.now() - started}ms)\n${stderr.slice(-8000)}\n${stdout}`);
   } finally {
     if (!exited && socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ id: 999999, method: 'Runtime.evaluate', params: { expression: "setImmediate(()=>process.mainModule.require('electron').app.quit()); true" } }));
