@@ -90,14 +90,21 @@ export class Teammate extends EventEmitter {
       try { if (event.generation !== this.generation) return { superseded: true }; return await this.process(event, signal); }
       finally { this.processing = --this.admissions > 0; }
     });
-    this.queue = job.catch(async error => { if (event.generation !== this.generation) return; this.gate.pause(); if (this.task) { this.task.error = error.message; this.task.errorCode = error.code; }
-      if (error.code === 'SESSION_WRITER_CONFLICT') await this.recordWriterConflict(event.harness, error);
-      this.phase('error'); await this.conversation.flush(); this.notice(error.message); });
+    this.queue = job.catch(async error => {
+      if (event.generation !== this.generation) return;
+      this.handlingFailure = true;
+      try {
+        this.gate.pause();
+        if (this.task) { this.task.error = error.message; this.task.errorCode = error.code; }
+        if (error.code === 'SESSION_WRITER_CONFLICT') await this.recordWriterConflict(event.harness, error);
+        this.phase('error'); await this.conversation.flush(); this.notice(error.message);
+      } finally { this.handlingFailure = false; this.emit('change'); }
+    });
     void this.queue.then(() => this.pump(), error => this.notice(error.message));
     return job;
   }
   notice(text) { this.emit('notice', text); }
-  busy() { return Boolean(this.recoveringSession || this.refreshingModels) || Object.values(this.adapters).some(a => a.active.size > 0); }
+  busy() { return Boolean(this.handlingFailure || this.recoveringSession || this.refreshingModels) || Object.values(this.adapters).some(a => a.active.size > 0); }
   status({ diagnostic = true } = {}) { return { config: this.config, effectiveEffort: this.adapters[this.config.harness]?.effectiveEffort, observedModel: this.adapters[this.config.harness]?.observedModel, settingsAcknowledged: this.adapters[this.config.harness]?.settingsAcknowledged, effectiveModel: this.adapters[this.config.harness]?.effectiveModel, effectiveFastMode: this.adapters[this.config.harness]?.effectiveFastMode, sessions: this.sessions, recoveringSession: this.recoveringSession, busy: this.busy() || this.processing, task: this.task, pending: this.pendingPings.map(({ event }) => ({ id: event.id, signal: event.signal, target: event.target })), context: this.context, wards: this.wards?.items ?? [], history: diagnostic ? this.history : undefined, conversation: this.conversation?.page(), approvals: this.approvals, signals }; }
   async listModels({ harness = this.config.harness, refresh = false } = {}) {
     const adapter = this.adapters[harness]; if (!adapter) throw new Error('Unknown harness');
