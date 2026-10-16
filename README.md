@@ -60,7 +60,7 @@ The teammate is your existing Codex, Claude or DSH harness, with its own model, 
 - Reasoning defaults to **0**, the model's lowest supported level. **1** chooses the next level; larger indices clamp to the model's maximum. The effective level is displayed after a turn starts. DSH defaults to thinking on: its indices count enabled levels, with a separate off switch.
 - **DeepSeek Harness (DSH)** is available through ACP. See [installation, free text API setup and verification limits](docs/dsh.md).
 
-v0.1.3 brings the chat homepage, upstream interaction improvements and exploration feedback to both desktop installers. Download assets appear when the tagged release passes CI.
+v0.1.4 brings the chat homepage, upstream interaction improvements and exploration feedback to both desktop installers. Download assets appear when the tagged release passes CI.
 
 ## Wheel and desktop improvements (current source)
 
@@ -70,7 +70,7 @@ v0.1.3 brings the chat homepage, upstream interaction improvements and explorati
 - Optional **Upside-down Missing (`¿`)** is in the signal pool; drag it into a slot. It uses the Question instruction, including your Question customization. Enemy Vision now has the same red artwork on the wheel and desktop.
 - Windows overlays leave the last 1 DIP of the display uncovered and refresh their topmost position before new content, including queued agent replies. macOS overlays stay out of Mission Control; replayed clicks retain double/triple-click counts, and settings recover after Dock restore. The current macOS source requires **macOS 13+ on Apple Silicon**.
 
-v0.1.3 brings the chat homepage, upstream interaction improvements and exploration feedback to both desktop installers. Download assets appear when the tagged release passes CI.
+v0.1.4 brings the chat homepage, upstream interaction improvements and exploration feedback to both desktop installers. Download assets appear when the tagged release passes CI.
 
 ## Signals
 
@@ -113,9 +113,9 @@ The native helper inherited from lolPing handles press, drag, release and cancel
 
 ## Quick start (macOS)
 
-v0.1.3 brings the chat homepage, upstream interaction improvements and exploration feedback to both desktop installers. Download assets appear when the tagged release passes CI.
+v0.1.4 brings the chat homepage, upstream interaction improvements and exploration feedback to both desktop installers. Download assets appear when the tagged release passes CI.
 
-1. **Install.** Download **LOLPingYourAI-0.1.3-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.3) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
+1. **Install.** Download **LOLPingYourAI-0.1.4-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.4) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
 2. **Connect a teammate.** Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) (`codex login`). The CLI bundled with the Codex desktop app is found automatically. Claude is experimental (see [Platform status](#platform-status)).
 3. **Grant permissions.** Open the app, then enable **Accessibility** and **Screen Recording** for LOLPingYourAI in *System Settings → Privacy & Security* and restart it. **AI Teammate** in settings shows both checks.
 4. **Ping.** Hover anything, hold <kbd>⌥ Option</kbd> + left mouse, drag, and release on **?**. <kbd>⌃ Control</kbd> + drag opens the emote wheel.
@@ -140,7 +140,7 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
 
 ## Quick start (Windows x64)
 
-Download **LOLPingYourAI-Setup-0.1.3.exe** from [v0.1.3](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.3). Install per user, connect a locally signed-in Codex CLI, and check the trigger key in Settings. Quit other lolPing/LOLPingYourAI instances first. The installer is unsigned.
+Download **LOLPingYourAI-Setup-0.1.4.exe** from [v0.1.4](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.4). Install per user, connect a locally signed-in Codex CLI, and check the trigger key in Settings. Quit other lolPing/LOLPingYourAI instances first. The installer is unsigned.
 
 The app discovers the Windows Codex desktop executable and standard npm installations. If needed, set `LOLPINGAI_CODEX` to the absolute `codex.exe` path before launching. Emergency stop is **Ctrl+Alt+Esc**. See [Windows build, tests and limitations](docs/windows.md).
 

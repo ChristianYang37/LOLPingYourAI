@@ -158,7 +158,11 @@ if op == "doctor" {
                     CGEvent(mouseEventSource: nil, mouseType: right ? .rightMouseUp : .leftMouseUp, mouseCursorPosition: p, mouseButton: right ? .right : .left)?.post(tap: .cghidEventTap)
                 } else {
                     CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
-                    CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: Int32(max(-2000, min(2000, number(args, "delta")))), wheel2: 0, wheel3: 0)?.post(tap: .cghidEventTap)
+                    let wheel = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: Int32(max(-2000, min(2000, number(args, "delta")))), wheel2: 0, wheel3: 0)
+                    // mouseMoved is asynchronous: bind the wheel to the validated
+                    // point instead of inheriting the pointer's previous position.
+                    wheel?.location = p
+                    wheel?.post(tap: .cghidEventTap)
                 }
             } else if op == "type" {
                 let text = Array((args["text"] as? String ?? "").utf16)

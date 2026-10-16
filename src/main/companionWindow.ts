@@ -8,6 +8,7 @@ export class CompanionWindow {
   private dismissed = '';
   private loading?: Promise<void>;
   private hiddenForCapture = 0;
+  private restoreAfterHidden = false;
   constructor(private status: () => any) {}
   async update() {
     if (!this.status().task) return;
@@ -31,7 +32,10 @@ export class CompanionWindow {
       this.win.setPosition(Math.round(Math.max(area.x, Math.min(x, area.x + area.width - width))), Math.round(Math.max(area.y, Math.min(point.y - 24, area.y + area.height - height))));
     }
     this.win.webContents.send('ai:changed');
-    if (this.dismissed !== task.id && !this.hiddenForCapture) this.win.showInactive();
+    if (this.dismissed !== task.id) {
+      if (this.hiddenForCapture) this.restoreAfterHidden = true;
+      else this.win.showInactive();
+    }
   }
   hide() { this.dismissed = this.taskId; this.win?.hide(); }
   resize(expanded: boolean) {
@@ -41,9 +45,24 @@ export class CompanionWindow {
     win.setBounds({ x: Math.max(area.x, Math.min(b.x, area.x + area.width - width)), y: Math.max(area.y, Math.min(b.y, area.y + area.height - height)), width, height });
   }
   async withoutWindow<T>(fn: () => Promise<T>): Promise<T> {
-    const visible = this.win?.isVisible(); this.hiddenForCapture++; this.win?.hide();
+    this.restoreAfterHidden ||= Boolean(this.win?.isVisible());
+    this.hiddenForCapture++; this.win?.hide();
     try { return await fn(); }
-    finally { this.hiddenForCapture--; if (visible && this.dismissed !== this.taskId && !this.hiddenForCapture) this.win?.showInactive(); }
+    finally {
+      this.hiddenForCapture--;
+      if (!this.hiddenForCapture) {
+        if (this.restoreAfterHidden && this.dismissed !== this.taskId && this.win && !this.win.isDestroyed()) this.win.showInactive();
+        this.restoreAfterHidden = false;
+      }
+    }
+  }
+  async withoutInputObstruction<T>(fn: () => Promise<T>): Promise<T> {
+    return this.withoutWindow(async () => {
+      // Let the compositor remove this always-on-top window before the native
+      // helper checks the point. Other apps remain subject to normal guards.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return fn();
+    });
   }
   close() { this.win?.destroy(); this.win = null; }
 }

@@ -24,7 +24,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   const store = new Store(settingsDir());
   const helper = app.isPackaged ? join(process.resourcesPath, process.platform === 'darwin' ? 'desktop-helper' : 'desktop-helper.exe') : join(root, 'native/desktop/build', process.platform === 'darwin' ? 'desktop-helper' : 'desktop-helper.exe');
   let companion: CompanionWindow | undefined;
-  const desktop = new Desktop({ electron, helper, dataDir: settingsDir(), overlays: { spawnAgent: (p: any) => overlays.spawnAgent(p), captureWithoutOverlays: (fn: () => Promise<any>) => companion ? companion.withoutWindow(() => overlays.captureWithoutOverlays(fn)) : overlays.captureWithoutOverlays(fn) }, pingIds: reverse });
+  const desktop = new Desktop({ electron, helper, withoutCompanion: (fn: () => Promise<any>) => companion ? companion.withoutInputObstruction(fn) : fn(), dataDir: settingsDir(), overlays: { spawnAgent: (p: any) => overlays.spawnAgent(p), captureWithoutOverlays: (fn: () => Promise<any>) => companion ? companion.withoutWindow(() => overlays.captureWithoutOverlays(fn)) : overlays.captureWithoutOverlays(fn) }, pingIds: reverse });
   const mcp = { command: process.execPath, args: [join(root, 'ai/mcp.mjs')], env: { ELECTRON_RUN_AS_NODE: '1', LOLPINGAI_ENDPOINT: '', LOLPINGAI_TOKEN: '' } };
   const bundledCodex = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex';
   const skillDir = join(settingsDir(), '.agents/skills/lolping-your-ai');

@@ -9,7 +9,7 @@ import { squareRegion, windowAnchor, anchoredPoint } from './geometry.mjs';
 const windowKey = target => `${target.pid}:${target.processStartedAt ?? ''}:${target.id}:${target.windowToken ?? ''}`;
 
 export class Desktop {
-  constructor({ electron, helper, dataDir, overlays, pingIds }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds }); this.bitmapLayout = bitmapLayout(electron?.nativeImage); this.savedBounds = new Map(); this.keyVerification = new Map(); this.captureTail = Promise.resolve(); }
+  constructor({ electron, helper, dataDir, overlays, pingIds, withoutCompanion = fn => fn() }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds, withoutCompanion }); this.bitmapLayout = bitmapLayout(electron?.nativeImage); this.savedBounds = new Map(); this.keyVerification = new Map(); this.captureTail = Promise.resolve(); }
   native(op, args = {}, signal) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) return reject(new Error('Desktop action cancelled'));
@@ -96,6 +96,9 @@ export class Desktop {
     this.overlays.spawnAgent({ id: this.pingIds[signal] ?? 'generic', displayId: display.id, x: point.x - display.bounds.x, y: point.y - display.bounds.y, tag: { name: caption || 'AI', color: 4 } });
   }
   async action(args, context, signal) {
+    return this.withoutCompanion(() => this.performAction(args, context, signal));
+  }
+  async performAction(args, context, signal) {
     const native = (op, args) => this.native(op, args, signal);
     const target = await this.resolve(context.target), identity = { id: target.id, pid: target.pid, processStartedAt: target.processStartedAt, ...(target.windowToken ? { windowToken: target.windowToken } : {}) };
     if (['click', 'scroll'].includes(args.action)) {
