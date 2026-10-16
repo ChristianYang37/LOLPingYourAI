@@ -24,6 +24,14 @@ If Codex App Server exits, its active turns are reported as failed, so interrupt
 
 One action gate serializes desktop operations. Warning/retreat invalidate the generation immediately, revoke new actions, request harness interruption and wait for confirmation and in-flight compatible actions. A timeout reports an unconfirmed stop. An old queued capture/session creation cannot re-enable the gate. An observe ping cannot click/type. Question defaults to explore: scroll/navigation keys and purposeful navigation clicks are allowed, but typing and arbitrary shortcuts are denied. The model must judge whether a click navigates or mutates; this is not a semantic button classifier. Scheduled wards and setup tests force observe mode. This protects the cooperating project backend; it is not an OS sandbox around arbitrary tools a user adds to a harness.
 
+### Codex writer conflicts
+
+Codex permits one native writer per persisted thread. LOLPingYourAI classifies a matching active-writer error from `thread/resume` or `turn/start`, invalidates its loaded-thread cache, pauses desktop actions and persists the conflict on the existing session. The history, goal, summary and thread ID are retained. Queued requests remain in the local display log as unsent; no stale desktop actions replay after recovery.
+
+Chat and the floating card offer `recoverSession({harness: "codex", sessionId})`. Recovery only resumes that exact thread after its owner releases it; it cannot steal a writer, archive another client's task, fork or replace history. A fresh ownership check bypasses the cache. Concurrent recovery, stale IDs and stop/binding races are rejected. The user then sends a fresh request, giving desktop work a fresh capture. Conflict state survives app restart. The underlying owner must release its thread; closing a tab alone may leave an idle native writer loaded.
+
+Run `CODEX_CLI_PATH=/path/to/codex pnpm test:codex-writer` for an opt-in native regression: two real App Servers use an isolated temporary `CODEX_HOME` and a localhost provider that rejects inference. It verifies the writer collision, archive/restore release and identical full turn history after reconnecting the same ID. It does not test model inference, a physical Windows desktop or automate the Codex desktop UI. Service and Electron UI regressions run in normal CI.
+
 ## Local bridge and state
 
 MCP is stdio; its child receives a random per-launch capability token for a loopback HTTP broker. Browser Origin requests and unauthenticated calls are rejected. Settings IPC validates its sender. MCP exposes only context/screenshot/action/reply/ward/handoff/icon tools, while the local CLI also has configuration and session operations. User text travels as JSON and process argument arrays, never interpolated shell commands.

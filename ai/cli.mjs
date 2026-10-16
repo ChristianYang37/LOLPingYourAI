@@ -11,10 +11,11 @@ const usage = `Usage: lolpingai <command> [json | --file payload.json]
   ping     Send a ping:        '{"signal":"missing","point":{"x":640,"y":400}}'
   config   Change settings:    '{"regionSize":512,"wardHours":0.5}'
   bind     Hand off a task:    '{"harness":"codex","summary":"Goal, progress, next step"}'
+  recoverSession  Reconnect original session: '{"harness":"codex","sessionId":"..."}'
   stop     Interrupt the teammate and return control
 
 Talks only to the LOLPingYourAI app running on this machine.`;
-const commands = ['doctor', 'status', 'stop', 'bind', 'ping', 'config', 'models'];
+const commands = ['doctor', 'status', 'stop', 'bind', 'ping', 'config', 'models', 'recoverSession'];
 const [command = 'status', ...args] = process.argv.slice(2);
 const directory = process.env.LOLPINGAI_DATA_DIR ?? (process.platform === 'darwin' ? join(homedir(), 'Library/Application Support/LOLPingYourAI') : join(process.env.APPDATA ?? homedir(), 'LOLPingYourAI'));
 try {

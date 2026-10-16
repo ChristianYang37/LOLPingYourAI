@@ -126,6 +126,9 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
 <details>
 <summary><b>Troubleshooting</b></summary>
 
+**Codex “already has an active writer” (current source):** The conversation is open for writing in another Codex client. Chat shows a recovery card with the original session ID. Let the other task finish, release that conversation there (for Codex desktop: temporarily archive the idle conversation, then restore it; for CLI: exit that session), and choose **Reconnect original session**. The full native history and ID remain unchanged. Failed and queued requests are not replayed; send the intended request again. Simply switching tabs may not release the writer. This recovery UI is newer than the v0.1.4 installer.
+
+
 - **"Apple could not verify…"**: this demo is ad-hoc signed and not notarized. Try to open it once, then choose **System Settings → Privacy & Security → Open Anyway**. If macOS says the app "is damaged", run `xattr -dr com.apple.quarantine /Applications/LOLPingYourAI.app`.
 - **The app isn't in the permission list**: add it with **+**. After a rebuild or update, a stale permission may need removing (**–**) and adding again.
 - **Codex not found**: quit the app and launch it with an explicit CLI path:

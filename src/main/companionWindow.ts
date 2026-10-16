@@ -11,7 +11,7 @@ export class CompanionWindow {
   private restoreAfterHidden = false;
   constructor(private status: () => any) {}
   async update() {
-    if (!this.status().task) return;
+    if (!this.status().task) { this.restoreAfterHidden = false; if (this.win && !this.win.isDestroyed()) { this.win.webContents.send('ai:changed'); this.win.hide(); } return; }
     if (this.status().task.signal === 'chat') { this.win?.hide(); return; }
     if (!this.win || this.win.isDestroyed()) {
       const win = this.win = new BrowserWindow({ width: 360, height: 360, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#101d27', webPreferences: { preload: preloadPath('companion'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
@@ -22,6 +22,7 @@ export class CompanionWindow {
     await this.loading;
     if (!this.win || this.win.isDestroyed()) return;
     const task = this.status().task;
+    if (!task) { this.win.hide(); return; }
     const fresh = task.id !== this.taskId;
     if (fresh) {
       this.taskId = task.id;
