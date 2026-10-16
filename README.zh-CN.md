@@ -60,7 +60,7 @@
 - 思考强度默认 **0**，即当前模型最低档；**1** 是第二低档，超出范围取最高档。启动一轮后显示实际生效值。DSH 默认开启思考，数字只计算开启档，关闭思考使用独立开关。
 - 新增 **DeepSeek Harness（DSH）ACP** 适配，详见[安装、免费 API 配置与验证范围](docs/dsh.md#中文)。
 
-聊天首页已包含在 v0.1.2 Windows 版中；旧版 v0.1.1 macOS 安装包早于聊天首页的整合。
+v0.1.3 将聊天首页、上游交互改进和探索反馈统一带入双平台安装包；下载资产在发布 tag 的 CI 通过后出现。
 
 ## 轮盘与桌面改进（当前源码）
 
@@ -70,7 +70,7 @@
 - 可选的「**反向问号 `¿`**」位于信号池，可拖进槽位；它沿用问号指令，包括你对问号的自定义内容。敌方视野在轮盘与桌面上统一使用红色图标。
 - Windows 覆盖层底部留出 1 DIP，并在新内容出现前重新置顶，agent 排队回复也适用。macOS 覆盖层不进入 Mission Control，点击回放保留双击／三击次数，设置窗口从 Dock 恢复后重建材质。当前 macOS 源码要求 **Apple Silicon、macOS 13+**。
 
-这些改动尚未包含在已有 v0.1.1 Mac / v0.1.2 Windows 安装包中。[迁移来源与验证范围](docs/upstream-migration.md)。
+v0.1.3 将聊天首页、上游交互改进和探索反馈统一带入双平台安装包；下载资产在发布 tag 的 CI 通过后出现。
 
 ## 信号
 
@@ -113,9 +113,9 @@ sequenceDiagram
 
 ## 快速开始（macOS）
 
-已有 v0.1.1 macOS 安装包早于聊天首页整合；macOS 用户可从当前源码构建体验这些变化。
+v0.1.3 将聊天首页、上游交互改进和探索反馈统一带入双平台安装包；下载资产在发布 tag 的 CI 通过后出现。
 
-1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.1) 下载 **LOLPingYourAI-0.1.1-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
+1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.3) 下载 **LOLPingYourAI-0.1.3-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
 2. **连接队友**：安装 [Codex CLI](https://developers.openai.com/codex/cli/) 并执行 `codex login`；Codex 桌面应用自带的 CLI 会被自动找到。Claude 目前为实验性支持（见[平台状态](#平台状态)）。
 3. **授权**：打开应用，在「系统设置 → 隐私与安全性」中为 LOLPingYourAI 开启**辅助功能**和**录屏与系统录音**，然后重启应用。设置里的 **AI Teammate / 你的队友** 会显示两项检查结果。
 4. **开始 ping**：鼠标停在任意内容上，按住 <kbd>⌥ Option</kbd> + 左键拖动，在 **？** 上松开。<kbd>⌃ Control</kbd> + 拖动打开表情轮盘。
@@ -140,7 +140,7 @@ sequenceDiagram
 
 ## 快速开始（Windows x64）
 
-在 [v0.1.2 发布页](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.2) 下载 **LOLPingYourAI-Setup-0.1.2.exe**，按用户安装，连接本机已登录的 Codex CLI，并在设置页确认触发键。启动前退出其他 lolPing/LOLPingYourAI 实例。当前安装包未签名。
+在 [v0.1.3 发布页](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.3) 下载 **LOLPingYourAI-Setup-0.1.3.exe**，按用户安装，连接本机已登录的 Codex CLI，并在设置页确认触发键。启动前退出其他 lolPing/LOLPingYourAI 实例。当前安装包未签名。
 
 支持查找 Windows Codex 桌面应用内置程序和标准 npm 安装；必要时在启动前将 `LOLPINGAI_CODEX` 设为 `codex.exe` 的绝对路径。紧急停止键为 **Ctrl+Alt+Esc**。构建、测试和验证边界见 [Windows 说明](docs/windows.md)。
 
