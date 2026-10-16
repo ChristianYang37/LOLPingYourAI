@@ -76,7 +76,7 @@
 
 | | 信号 | 队友会… |
 |:-:|---|---|
-| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **问号** | 解释这个区域；只看不改。 |
+| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **问号** | 主动探索并解释选中区域，按需要翻阅页面、检索相关历史与文件。 |
 | <img src="assets/textures/assist_me.png" width="30" alt=""> | **求助** | 检查进度并帮你做完；先检索上下文，意图仍不明确时再问。 |
 | <img src="assets/textures/pingwheel_retreatrender.png" width="30" alt=""> | **危险** | 立即中断，看最新截图和你的纠正，再重新判断。 |
 | <img src="assets/textures/omw.png" width="30" alt=""> | **正在路上** | 铺满目标窗口，用可恢复的方式改善阅读。 |
@@ -158,7 +158,7 @@ sequenceDiagram
 ## 安全与隐私
 
 - **只在本机**：MCP 服务通过回环地址和每次启动随机生成的令牌与应用通信，拒绝来自浏览器页面的请求。截图、会话、插眼和令牌保存在 `~/Library/Application Support/LOLPingYourAI`（Windows 为 `%APPDATA%/LOLPingYourAI`），不会进入 Git。
-- **操作有边界**：问号和插眼回访不能点击或输入；每次操作前重新确认窗口身份，窗口移动后旧坐标作废；目标关闭、锁屏或无法确定时明确报错。
+- **操作有边界**：问号默认允许为理解页面而导航；明确的仅观察模式和插眼回访不能点击或输入；每次操作前重新确认窗口身份，窗口移动后旧坐标作废；目标关闭、锁屏或无法确定时明确报错。
 - **数据只发给你选的服务**：截图区域和指令只会以你现有的账号发送给你选择的 harness 和模型。
 - **Claude 的工具**：只开放只读的 `Read`、`Grep`、`Glob` 和桌面工具。工具调用前的钩子会拒绝凭据目录、密钥文件、对整个用户目录的检索以及其他所有工具，即使你的全局 Claude 设置允许它们。
 - **不是沙箱**：这些限制保护的是本项目自带的后端；你另外给 harness 装的插件不在范围内。
@@ -249,3 +249,6 @@ pnpm dist                                       # Windows x64 安装包（需在
 英雄联盟的美术、动画和音效 © Riot Games, Inc.，**不**适用 MIT 许可，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。这是独立的粉丝项目，未获 Riot Games、OpenAI 或 Anthropic 认可。
 
 连接与诊断默认关闭；需要排查时，在设置 → AI 队友中显式开启。关闭后不收集原始协议事件，聊天与信号记录正常保留。性能 CI 的范围、预算及本机测量见[性能测试说明](docs/performance.md)。
+
+
+聊天显示请求截图与 agent 最新观察，支持 Markdown 表格、代码块和 LaTeX 数学公式。桌面任务进行时，工作表情与流式输出常驻浮窗；同一目标附近连续问号会补充语气，情绪表情允许夸张回敬，不自动启动编辑。详见[交互设计与验证](docs/interaction-ux.md)。

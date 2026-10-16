@@ -12,10 +12,10 @@ const { registerAppScheme, serveAppScheme, DEFAULT_SETTINGS } = require(path.joi
 rmSync(temp, { recursive: true, force: true });
 registerAppScheme();
 const settings = { ...DEFAULT_SETTINGS, language: 'zh-CN' };
-let state = { config: { harness: 'codex', setupComplete: true, modelSelections: {}, reasoningEffort: 0, regionSize: 512, wardHours: .5, banter: true }, task: null, signals: {}, sessions: {}, pending: [], approvals: [], wards: [] };
+let state = { language: 'zh-CN', config: { harness: 'codex', setupComplete: true, modelSelections: {}, reasoningEffort: 0, regionSize: 512, wardHours: .5, banter: true }, task: null, signals: {}, sessions: {}, pending: [], approvals: [], wards: [] };
 const calls = [];
 for (const [channel, value] of Object.entries({ 'settings:get': settings, 'status:get': { enabled: true, helper: 'running' }, 'app:about': null, 'app:capture': null, 'update:get': null })) ipcMain.handle(channel, () => value);
-ipcMain.handle('ai:call', (_e, method, args) => { calls.push({ method, args }); if (method === 'status') return state; if (method === 'conversation') return { entries: [{ id: 'older', role: 'user', kind: 'text', time: 1, text: '更早的聊天' }], hasMore: false }; if (method === 'config') { state = { ...state, config: { ...state.config, ...args } }; return state.config; } if (method === 'candidates') return []; if (method === 'models') return { models: [], defaultModel: '' }; return {}; });
+ipcMain.handle('ai:call', (_e, method, args) => { calls.push({ method, args }); if (method === 'capturePreview') return { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jH1sAAAAASUVORK5CYII=' }; if (method === 'status') return state; if (method === 'conversation') return { entries: [{ id: 'older', role: 'user', kind: 'text', time: 1, text: '更早的聊天' }], hasMore: false }; if (method === 'config') { state = { ...state, config: { ...state.config, ...args } }; return state.config; } if (method === 'candidates') return []; if (method === 'models') return { models: [], defaultModel: '' }; return {}; });
 const delay = ms => new Promise(r => setTimeout(r, ms));
 async function waitFor(label, predicate) {
   const deadline = Date.now() + 10000;
@@ -96,6 +96,20 @@ app.whenReady().then(async () => {
     assert.equal(await js("document.documentElement.scrollWidth <= innerWidth"), true);
     assert.equal(await js("document.querySelector('.conversation-full form').getBoundingClientRect().bottom <= innerHeight"), true);
     writeFileSync(path.join(tmpdir(), 'lolping-chat-small-dark.png'), (await win.webContents.capturePage()).toPNG());
+    state = { ...state, busy: true, task: { id: 'working-rich', startedAt: Date.now(), phase: 'working', mode: 'explore', target: { app: 'Practice board' }, preview: { file: 'ping-1.png', capturedAt: Date.now(), region: { imageWidth: 512, imageHeight: 512 } }, text: '# Explanation\n\n$$E=mc^2$$\n\n```js\nconst answer = 42;\n```\n\n<script>window.bad = true</script>\n\n![remote](https://example.invalid/tracker.png)' } };
+    const floating = new BrowserWindow({ show: false, width: 360, height: 360, webPreferences: { backgroundThrottling: false, preload: path.resolve('out/preload/companion.js') } });
+    await floating.loadURL('lolping://app/companion/index.html');
+    const fjs = code => floating.webContents.executeJavaScript(code);
+    await waitFor('working emote and rich reply', () => fjs("!!document.querySelector('.working-emote') && !!document.querySelector('.katex') && !!document.querySelector('.capture-preview img')"));
+    await fjs("document.querySelector('.conversation-body').scrollTop = 0");
+    assert.equal(await fjs("document.querySelector('pre code').textContent.includes('const answer = 42')"), true);
+    assert.equal(await fjs("!!window.bad || !!document.querySelector('img[src^=https]')"), false);
+    assert.equal(await fjs("document.querySelector('.working-emote').complete && document.querySelector('.working-emote').naturalWidth > 0"), true);
+    assert.equal(await fjs("getComputedStyle(document.querySelector('.reply-text')).webkitLineClamp"), 'none');
+    writeFileSync(path.join(tmpdir(), 'lolping-working-rich.png'), (await floating.webContents.capturePage()).toPNG());
+    state = { ...state, busy: false, task: { ...state.task, phase: 'done' } }; floating.webContents.send('ai:changed');
+    await waitFor('working illustration stops at completion', () => fjs("!document.querySelector('.working-emote')"));
+    floating.destroy();
     console.log('Chat default, settings navigation, full replies, draft retention, follow-up context, stop action and compact dark layout passed.'); app.exit(0);
   } catch (e) { console.error(e); console.error('Renderer content:', await js('document.body.innerText').catch(String)); app.exit(1); }
 });

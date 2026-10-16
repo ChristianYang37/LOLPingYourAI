@@ -76,7 +76,7 @@ These changes are not in the existing v0.1.1 Mac / v0.1.2 Windows installers. [M
 
 | | Signal | Your teammate… |
 |:-:|---|---|
-| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **Question** | explains the square. Observe only. |
+| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **Question** | explores and explains the selected region; uses relevant page navigation and native context search. |
 | <img src="assets/textures/assist_me.png" width="30" alt=""> | **Assist** | inspects progress and helps finish. It recovers context first and asks if your intent is still unclear. |
 | <img src="assets/textures/pingwheel_retreatrender.png" width="30" alt=""> | **Danger** | interrupts, looks at a fresh screenshot and your correction, then reassesses. |
 | <img src="assets/textures/omw.png" width="30" alt=""> | **On my way** | expands the target window and improves readability with reversible view changes. |
@@ -87,7 +87,7 @@ These changes are not in the existing v0.1.1 Mac / v0.1.2 Windows installers. [M
 | <img src="assets/textures/emote_super_approved.png" width="30" alt=""> <img src="assets/textures/emote_gg_heart.png" width="30" alt=""> | **Nice / Celebrate** | keeps going, or celebrates a finished task. |
 | <img src="assets/textures/vision_cleared.png" width="30" alt=""> | **Clear ward** | cancels this window's pending visits. |
 
-The original eight-slot layout is kept. Extra signals are in the slot picker: **Push**, **Attention here**, **Look here**. Every signal's message and behavior (observe, work, correct, stop, ward, emote) can be edited under **AI Teammate** in settings. The skill reads the current configuration on every ping.
+The original eight-slot layout is kept. Extra signals are in the slot picker: **Push**, **Attention here**, **Look here**. Every signal's message and behavior (observe, explore, work, correct, stop, ward, emote) can be edited under **AI Teammate** in settings. The skill reads the current configuration on every ping.
 
 ## How it works
 
@@ -158,7 +158,7 @@ What was actually exercised, and what wasn't, is recorded in [docs/verification.
 ## Safety and privacy
 
 - **Local only.** The MCP server talks to the app over loopback with a random per-launch token. Browser-origin requests are refused. Captures, sessions, wards and tokens stay in `~/Library/Application Support/LOLPingYourAI` (`%APPDATA%/LOLPingYourAI` on Windows) and never belong in Git.
-- **Scoped actions.** Question and ward visits cannot click or type. The window is re-resolved before every action, coordinates go stale when it moves, and a closed, locked or ambiguous target fails visibly.
+- **Scoped actions.** Question uses navigation-only exploration; explicit observe-only mappings and ward visits cannot click or type. The window is re-resolved before every action, coordinates go stale when it moves, and a closed, locked or ambiguous target fails visibly.
 - **Data to your provider.** The square and the instruction go to the harness and model you chose, under your existing account.
 - **Claude's tools.** Only read-only `Read`, `Grep` and `Glob` plus the desktop tools are exposed. A pre-tool hook refuses credential folders, key files, whole-home sweeps and every other tool, even ones your global Claude settings allow.
 - **Not a sandbox.** These controls protect the backend this project ships. Extra plugins you add to a harness are outside them.
@@ -249,3 +249,6 @@ Derived from [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1, wh
 League of Legends artwork, animations and audio © Riot Games, Inc. They are **not** covered by the MIT license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is an independent fan project, not endorsed by Riot Games, OpenAI or Anthropic.
 
 Connection & diagnostics is off by default. Enable it explicitly in Settings → AI Teammate when troubleshooting. With it off, raw protocol events are not collected; chat and ping history remain available. See [performance testing](docs/performance.md) for CI scope, budgets and local measurements.
+
+
+The chat shows the request capture and latest agent view, with Markdown tables, fenced code and LaTeX math. A generated working emote stays beside streaming output during active desktop tasks. Nearby repeated question marks add tone to the same request when the target identity matches; emotional emotes invite playful replies without starting edits. See [interaction behavior and validation](docs/interaction-ux.md).

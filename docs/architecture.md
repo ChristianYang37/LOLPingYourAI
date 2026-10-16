@@ -22,7 +22,7 @@ Claude's built-in tool set is limited to read-only `Read`, `Grep` and `Glob`, so
 
 If Codex App Server exits, its active turns are reported as failed, so interruption and ward follow-ups do not wait for a completion that can no longer arrive; the next ping starts a fresh server. Concurrent callers share one initialization, so no request is sent before `initialized`.
 
-One action gate serializes desktop operations. Warning/retreat invalidate the generation immediately, revoke new actions, request harness interruption and wait for confirmation and in-flight compatible actions. A timeout reports an unconfirmed stop. An old queued capture/session creation cannot re-enable the gate. A regular observe ping cannot click/type. This protects the cooperating project backend; it is not an OS sandbox around arbitrary tools a user adds to a harness.
+One action gate serializes desktop operations. Warning/retreat invalidate the generation immediately, revoke new actions, request harness interruption and wait for confirmation and in-flight compatible actions. A timeout reports an unconfirmed stop. An old queued capture/session creation cannot re-enable the gate. An observe ping cannot click/type. Question defaults to explore: scroll/navigation keys and purposeful navigation clicks are allowed, but typing and arbitrary shortcuts are denied. The model must judge whether a click navigates or mutates; this is not a semantic button classifier. Scheduled wards and setup tests force observe mode. This protects the cooperating project backend; it is not an OS sandbox around arbitrary tools a user adds to a harness.
 
 ## Local bridge and state
 

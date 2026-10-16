@@ -1,10 +1,12 @@
 import '../conversation.css';
+import { RichReply } from './RichReply';
+import { CapturePreview } from './CapturePreview';
+import workingEmote from '../../assets/working.png';
 import { useEffect, useRef, useState } from 'react';
 import { pingById, textureUrl } from '../../../shared/pings';
 
 declare global { interface Window { teammateApi: { call(method: string, args?: unknown): Promise<any>; onChange(cb: () => void): () => void } } }
 const call = (method: string, args?: unknown) => window.teammateApi.call(method, args);
-const readable = (text: string) => text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => part.startsWith('**') ? <strong key={i}>{part.slice(2, -2)}</strong> : part.startsWith('`') ? <code key={i}>{part.slice(1, -1)}</code> : part);
 const phases: Record<string, [string, string, string]> = {
   received: ['generic_ping', 'Received', '已收到'], understanding: ['omw', 'Understanding', '正在理解'], working: ['all_in', 'Working', '正在执行'], waiting: ['enemy_missing', 'Your turn', '等你回答'], done: ['emote_super_approved', 'Done', '已完成'], stopping: ['pingwheel_retreatrender', 'Stopping…', '正在停止…'], stopped: ['pingwheel_retreatrender', 'Stopped', '已停止'], error: ['pingwheel_retreatrender', 'Needs attention', '需要处理'],
 };
@@ -35,11 +37,15 @@ export function Conversation({ state, zh, floating = false, fullPage = false, tr
     } catch (e) { setError(String(e)); }
   };
   const task = state.task, phase = phases[task?.phase] ?? phases.received;
+  const working = Boolean(state.busy && task?.mode !== 'emotion' && ['received', 'understanding', 'working'].includes(task?.phase));
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => { if (!working) return; const timer = setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, [working]);
   useEffect(() => { if (followBottom.current && body.current) body.current.scrollTop = body.current.scrollHeight; }, [task?.text, task?.id, log]);
   const run = async (method: string, args?: unknown) => { setError(''); setSending(true); try { await call(method, args); return true; } catch (e) { setError(String(e)); return false; } finally { setSending(false); } };
-  return <div className={`conversation ${expanded || fullPage ? 'expanded' : ''} ${fullPage ? 'conversation-full' : ''}`}>
-    <header><img src={textureUrl(phase[0])} alt="" /><strong role="status">{task ? phase[zh ? 2 : 1] : t('Ready when you are', '等待你的信号')}</strong><span className="spacer" />{floating && <button title={t('Hide', '隐藏')} onClick={() => void call('hideCard')}>×</button>}</header>
+  return <div className={`conversation ${working ? 'is-working' : ''} ${expanded || fullPage ? 'expanded' : ''} ${fullPage ? 'conversation-full' : ''}`}>
+    <header><img className={working ? 'working-emote' : undefined} src={working ? workingEmote : textureUrl(phase[0])} alt="" /><strong role="status">{task ? phase[zh ? 2 : 1] : t('Ready when you are', '等待你的信号')}</strong>{working && <small className="work-elapsed">{Math.max(0, Math.floor((clock - (task.startedAt ?? clock)) / 1000))}s</small>}<span className="spacer" />{floating && <button title={t('Hide', '隐藏')} onClick={() => void call('hideCard')}>×</button>}</header>
     <div className="conversation-body" ref={body} onScroll={() => { const el = body.current; if (el) followBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
+      {task?.preview && <details className="current-capture"><summary>{t('View what the agent sees now', '查看 agent 当前看到的区域')}</summary><CapturePreview preview={task.preview} target={task.target} zh={zh} latest /></details>}
       {fullPage && log?.entries.length ? <div className="conversation-log" aria-label={t('Conversation and signals', '聊天与信号记录')}>
         {log.hasMore && <button type="button" onClick={() => void older()}>{t('Load earlier records', '查看更早记录')}</button>}
         {log.entries.map(row => {
@@ -48,7 +54,9 @@ export function Conversation({ state, zh, floating = false, fullPage = false, tr
           return <article key={row.id} className={`log-entry log-${row.role} log-${row.kind}`}>
             <div className="log-meta"><strong>{row.role === 'user' ? t('You', '你') : row.role === 'timer' ? t('Ward follow-up', '回访') : (row.harness ?? 'Agent')}</strong><time dateTime={new Date(row.time).toISOString()}>{new Date(row.time).toLocaleString(zh ? 'zh-CN' : 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>{row.target?.app && <span title={row.target.title}>{row.target.app}</span>}</div>
             {row.kind === 'ping' && <div className="log-signal"><img src={textureUrl(ping?.icon ?? 'generic_ping')} alt="" /><strong>{zh ? label ?? row.signal : ping?.name ?? row.signal}</strong></div>}
-            {row.text && <p className="reply-text">{readable(row.text)}</p>}
+            {row.repeatCount > 1 && <small>×{row.repeatCount} {t('in this burst', '次连发')}</small>}{row.groupedWith && <small>{t('Added to the same request', '已补充到同一请求')}</small>}
+            {row.preview && <CapturePreview preview={row.preview} target={row.target} zh={zh} />}
+            {row.text && <RichReply text={row.text} />}
             {row.phase && <small>{phases[row.phase]?.[zh ? 2 : 1] ?? row.phase}</small>}
             {row.error && <p role="alert">{row.error}</p>}
           </article>;
@@ -60,8 +68,9 @@ export function Conversation({ state, zh, floating = false, fullPage = false, tr
         <div className="ping-examples"><span><b>?</b>{t('Explain this', '问号 · 帮我理解')}</span><span>⚑ {t('Lend a hand', '求助 · 一起完成')}</span><span>⚔ {t('Focus here', '交战 · 专注这里')}</span></div>
       </div> : <div className="reply-message">
       <small>{task?.target?.app ?? 'LOLPingYourAI'}{state.pending?.length > 0 && ` · ${state.pending.length} ${t('queued', '条排队中')}`}</small>
-      <p className="reply-text">{task?.text ? readable(task.text) : task ? t('Your teammate is preparing a reply…', '队友正在准备回复…') : t('Ping a region to start. Your teammate’s reply appears here.', '向一个区域发信号，队友的回复会出现在这里。')}</p>
+      <RichReply text={task?.text || (task ? t('Your teammate is preparing a reply…', '队友正在准备回复…') : t('Ping a region to start. Your teammate’s reply appears here.', '向一个区域发信号，队友的回复会出现在这里。'))} />
       </div>}
+      {state.pending?.length > 0 && <details className="pending-list"><summary>{state.pending.length} {t('requests queued', '条请求排队中')}</summary>{state.pending.map((p: any) => <p key={p.id}>{p.signal} · {p.target?.app ?? t('Locating target', '定位目标中')}</p>)}</details>}
       {task?.error && <p role="alert">{task.error}</p>}
       {(state.approvals ?? []).map((p: any) => <div key={`${p.harness}:${p.request.id}`} className="approval">
         <strong>{t('Your teammate needs your answer', '队友需要你的回答')}</strong>

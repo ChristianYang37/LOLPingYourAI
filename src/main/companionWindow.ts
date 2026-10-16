@@ -13,7 +13,7 @@ export class CompanionWindow {
     if (!this.status().task) return;
     if (this.status().task.signal === 'chat') { this.win?.hide(); return; }
     if (!this.win || this.win.isDestroyed()) {
-      const win = this.win = new BrowserWindow({ width: 360, height: 280, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#101d27', webPreferences: { preload: preloadPath('companion'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+      const win = this.win = new BrowserWindow({ width: 360, height: 360, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#101d27', webPreferences: { preload: preloadPath('companion'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       win.webContents.on('will-navigate', (event, url) => { if (url !== pageUrl('companion')) event.preventDefault(); });
       this.loading = loadPage(win, 'companion');
@@ -37,7 +37,7 @@ export class CompanionWindow {
   resize(expanded: boolean) {
     const win = this.win; if (!win) return;
     const b = win.getBounds(), area = screen.getDisplayMatching(b).workArea;
-    const width = Math.min(area.width, expanded ? 440 : 360), height = Math.min(area.height, expanded ? 560 : 280);
+    const width = Math.min(area.width, expanded ? 440 : 360), height = Math.min(area.height, expanded ? 560 : 360);
     win.setBounds({ x: Math.max(area.x, Math.min(b.x, area.x + area.width - width)), y: Math.max(area.y, Math.min(b.y, area.y + area.height - height)), width, height });
   }
   async withoutWindow<T>(fn: () => Promise<T>): Promise<T> {

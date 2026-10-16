@@ -60,12 +60,14 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   });
   const packDir = join(settingsDir(), 'asset-pack');
   const handlers: Record<string, (args: any) => any> = {
+    openLink: args => { const url = new URL(args.url); if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Only web links can be opened'); return electron.shell.openExternal(url.href); },
+    capturePreview: async args => (await load('capture-preview.mjs')).capturePreview(service, settingsDir(), args.file),
     status: view, conversation: args => service.conversation.page(args), config: args => service.configure(args), stop: () => { service.generation++; return Promise.all([service.stop(), iconJob.cancel()]); },
     doctor: () => desktop.doctor(), connection: async () => adapters[service.config.harness as keyof typeof adapters].capabilities(),
     models: args => service.listModels(args),
     message: args => service.message(args), followup: args => service.followup(args), wardAction: args => service.wardAction(args),
     copyReply: () => electron.clipboard.writeText(service.task?.text ?? ''), hideCard: () => companion?.hide(), resizeCard: args => companion?.resize(Boolean(args.expanded)),
-    testPing: async () => { await new Promise(resolve => setTimeout(resolve, 3000)); return service.dispatch({ signal: 'missing', point: screen.getCursorScreenPoint(), message: 'Setup test: briefly describe the visible region, then reply with one onmyway ping. Observe only.' }); },
+    testPing: async () => { await new Promise(resolve => setTimeout(resolve, 3000)); return service.dispatch({ signal: 'missing', observeOnly: true, point: screen.getCursorScreenPoint(), message: 'Setup test: briefly describe the visible region, then reply with one onmyway ping. Observe only.' }); },
     bind: args => service.bind(args), approve: args => service.approve(args),
     candidates: () => icons.list(),
     importCrop: args => icons.submit({ name: args.name || 'My emote', pngBase64: args.pngBase64 }, 'local-crop'),
@@ -80,7 +82,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   };
   ipcMain.handle('ai:call', async (event, method: string, args: unknown) => {
     const isSettings = event.sender === settingsWindow()?.webContents;
-    const cardMethods = ['status', 'followup', 'approve', 'stop', 'copyReply', 'hideCard', 'resizeCard'];
+    const cardMethods = ['status', 'openLink', 'capturePreview', 'followup', 'approve', 'stop', 'copyReply', 'hideCard', 'resizeCard'];
     if (event.senderFrame !== event.sender.mainFrame || (!isSettings && (event.sender !== companion?.win?.webContents || !cardMethods.includes(method)))) throw new Error('Unauthorized teammate sender');
     if (!Object.hasOwn(handlers, method)) throw new Error('Unknown teammate operation');
     return handlers[method](args ?? {});

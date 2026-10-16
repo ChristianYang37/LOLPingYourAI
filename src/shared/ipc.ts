@@ -62,6 +62,7 @@ export interface AppStatus {
 
 export interface About {
   version: string;
+  buildCommit?: string;
   problems: string[];
   limitations: string[];
 }

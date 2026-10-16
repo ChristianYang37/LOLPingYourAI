@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -82,9 +83,9 @@ export class Desktop {
     });
     region.imageScale = 1; region.imageWidth = size; region.imageHeight = size;
     const dir = join(this.dataDir, 'captures'); await mkdir(dir, { recursive: true, mode: 0o700 });
-    const imagePath = join(dir, `ping-${Date.now()}.png`); await writeFile(imagePath, png, { mode: 0o600 });
+    const imagePath = join(dir, `ping-${Date.now()}-${randomUUID()}.png`); await writeFile(imagePath, png, { mode: 0o600 });
     // Keep a bounded local diagnostic history; never delete the just-captured image.
-    const old = (await readdir(dir)).filter(f => /^ping-\d+\.png$/.test(f)).sort().slice(0, -100);
+    const old = (await readdir(dir)).filter(f => /^ping-\d+(?:-[0-9a-f-]{36})?\.png$/.test(f)).sort().slice(0, -100);
     await Promise.all(old.map(f => unlink(join(dir, f)).catch(() => {})));
     if (canVerify && this.keyVerification.get(windowKey(target)) === verification) this.keyVerification.delete(windowKey(target));
     return { target, region, imagePath };
