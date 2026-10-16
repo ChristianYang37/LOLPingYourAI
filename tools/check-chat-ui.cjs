@@ -14,8 +14,9 @@ registerAppScheme();
 const settings = { ...DEFAULT_SETTINGS, language: 'zh-CN' };
 let state = { language: 'zh-CN', config: { harness: 'codex', setupComplete: true, modelSelections: {}, reasoningEffort: 0, regionSize: 512, wardHours: .5, banter: true }, task: null, signals: {}, sessions: {}, pending: [], approvals: [], wards: [] };
 const calls = [];
+let recoveryAttempts = 0, winChanged;
 for (const [channel, value] of Object.entries({ 'settings:get': settings, 'status:get': { enabled: true, helper: 'running' }, 'app:about': null, 'app:capture': null, 'update:get': null })) ipcMain.handle(channel, () => value);
-ipcMain.handle('ai:call', (_e, method, args) => { calls.push({ method, args }); if (method === 'capturePreview') return { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jH1sAAAAASUVORK5CYII=' }; if (method === 'status') return state; if (method === 'conversation') return { entries: [{ id: 'older', role: 'user', kind: 'text', time: 1, text: '更早的聊天' }], hasMore: false }; if (method === 'config') { state = { ...state, config: { ...state.config, ...args } }; return state.config; } if (method === 'candidates') return []; if (method === 'models') return { models: [], defaultModel: '' }; return {}; });
+ipcMain.handle('ai:call', (_e, method, args) => { calls.push({ method, args }); if (method === 'recoverSession') { if (++recoveryAttempts === 1) throw new Error('thread original-thread already has an active writer'); delete state.sessions.codex.writerConflict; winChanged?.(); return { recovered: true, sessionId: args.sessionId, replayed: false }; } if (method === 'capturePreview') return { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jH1sAAAAASUVORK5CYII=' }; if (method === 'status') return state; if (method === 'conversation') return { entries: [{ id: 'older', role: 'user', kind: 'text', time: 1, text: '更早的聊天' }], hasMore: false }; if (method === 'config') { state = { ...state, config: { ...state.config, ...args } }; return state.config; } if (method === 'candidates') return []; if (method === 'models') return { models: [], defaultModel: '' }; return {}; });
 const delay = ms => new Promise(r => setTimeout(r, ms));
 async function waitFor(label, predicate) {
   const deadline = Date.now() + 10000;
@@ -30,6 +31,7 @@ app.whenReady().then(async () => {
   win.webContents.on('console-message', event => console.log('renderer:', event.message));
   win.webContents.on('render-process-gone', (_event, details) => console.error('renderer exited:', details));
   const js = code => win.webContents.executeJavaScript(code);
+  winChanged = () => win.webContents.send('ai:changed');
   const visible = selector => js(`!!document.querySelector(${JSON.stringify(selector)})?.getClientRects().length`);
   const click = selector => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
   try {
@@ -78,6 +80,22 @@ app.whenReady().then(async () => {
     await click('.conversation-log > button'); await waitFor('older messages', () => js("document.querySelectorAll('.log-entry').length === 4"));
     assert.equal(await js("document.querySelectorAll('.log-entry').length"), 4);
     assert.equal(calls.find(c => c.method === 'conversation')?.args.before, 'history-user');
+    const requestsBeforeRecovery = calls.filter(c => ['bind', 'message', 'followup'].includes(c.method)).length;
+    state = { ...state, sessions: { codex: { id: 'original-thread', writerConflict: { detail: 'thread original-thread already has an active writer' } } } };
+    win.webContents.send('ai:changed');
+    await waitFor('writer recovery panel', () => visible('[data-testid=session-recovery]'));
+    assert.equal(await js("document.querySelector('[data-testid=session-recovery]').textContent.includes('完整历史已保留')"), true);
+    assert.equal(await js("document.querySelector('.conversation form button').disabled"), true);
+    writeFileSync(path.join(tmpdir(), 'lolping-session-recovery.png'), (await win.webContents.capturePage()).toPNG());
+    await click('[data-testid=session-recovery] button');
+    await waitFor('still occupied feedback', () => js("document.querySelector('[data-testid=session-recovery]').textContent.includes('会话仍被占用')"));
+    await click('[data-testid=session-recovery] button');
+    await waitFor('original session restored', () => js("document.body.textContent.includes('原会话已重新连接')"));
+    assert.deepEqual(calls.filter(c => c.method === 'recoverSession').map(c => c.args), [
+      { harness: 'codex', sessionId: 'original-thread' }, { harness: 'codex', sessionId: 'original-thread' },
+    ]);
+    assert.equal(calls.filter(c => ['bind', 'message', 'followup'].includes(c.method)).length, requestsBeforeRecovery);
+    assert.equal(await js("document.querySelectorAll('.log-entry').length"), 4);
     await click('.workspace-switch'); await delay(100);
     await js("[...document.querySelectorAll('.settings-side button')].find(b=>b.textContent.includes('AI 队友')).click()"); await delay(100);
     assert.equal(await js("document.querySelector('.settings-content').textContent.includes('闲置重置')"), false);

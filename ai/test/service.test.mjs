@@ -399,3 +399,79 @@ test('standalone taunting does not append a duplicate completion comeback', asyn
   adapter.finish(); await new Promise(r => setImmediate(r));
   assert.deepEqual(replies, ['bait', 'missing']); service.close();
 });
+
+const writerConflict = id => Object.assign(new Error(`thread ${id} already has an active writer`), { code: 'SESSION_WRITER_CONFLICT', threadId: id });
+async function conflicted() {
+  const f = await fixture();
+  await f.service.dispatch({ signal: 'chat', message: 'Original history' }); f.adapter.finish();
+  await f.service.handoff({ contextId: f.service.context.id, summary: 'Detailed progress', goal: 'Original goal' });
+  f.adapter.resume = async id => { throw writerConflict(id); };
+  await assert.rejects(f.service.dispatch({ signal: 'assist' }), /active writer/); await f.service.queue;
+  return f;
+}
+test('conflict persists with original identity, goal, summary and full local history across restart', async () => {
+  const { service, adapter } = await conflicted();
+  assert.equal(service.gate.allowed, false); assert.equal(service.task.errorCode, 'SESSION_WRITER_CONFLICT');
+  const original = structuredClone(service.sessions.codex), rows = structuredClone(service.conversation.rows);
+  const restarted = new Teammate({ store: service.store, adapters: { codex: adapter }, desktop: service.desktop }); await restarted.init();
+  assert.deepEqual(restarted.sessions.codex, original); assert.deepEqual(restarted.conversation.rows, rows);
+  await assert.rejects(restarted.dispatch({ signal: 'chat', message: 'not sent' }), /SESSION_WRITER_CONFLICT/);
+  assert.equal(adapter.next, 1); assert.equal(adapter.sent.length, 1);
+  assert.equal(original.summary, 'Detailed progress'); assert.equal(original.goal, 'Original goal');
+});
+test('recovery checks same thread, preserves history and never starts or replays a turn', async () => {
+  const { service, adapter } = await conflicted(); const before = structuredClone(service.conversation.rows);
+  await assert.rejects(service.recoverSession({ harness: 'codex', sessionId: 'wrong' }), /stale/);
+  await assert.rejects(service.recoverSession({ harness: 'codex', sessionId: 'session-1' }), /active writer/);
+  assert.ok(service.sessions.codex.writerConflict);
+  adapter.resume = async (id, options) => { assert.equal(id, 'session-1'); assert.equal(options.force, true); return id; };
+  assert.deepEqual(await service.recoverSession({ harness: 'codex', sessionId: 'session-1' }), { recovered: true, sessionId: 'session-1', replayed: false });
+  assert.equal(service.sessions.codex.writerConflict, undefined); assert.equal(service.sessions.codex.summary, 'Detailed progress');
+  assert.equal(service.sessions.codex.goal, 'Original goal'); assert.equal(adapter.next, 1); assert.equal(adapter.sent.length, 1);
+  assert.equal(service.gate.allowed, false); assert.equal(service.conversation.rows.length, before.length);
+  assert.deepEqual(service.conversation.rows, before);
+  adapter.resume = async id => id;
+  await service.dispatch({ signal: 'chat', message: 'User explicitly sends again' });
+  assert.equal(adapter.sent.at(-1).id, 'session-1');
+});
+test('stop and repeated recovery requests cannot revive a stale recovery', async () => {
+  const { service, adapter } = await conflicted(); let release;
+  adapter.resume = () => new Promise(r => { release = r; });
+  const recovering = service.recoverSession({ harness: 'codex', sessionId: 'session-1' });
+  await assert.rejects(service.recoverSession({ harness: 'codex', sessionId: 'session-1' }), /current operation/);
+  await service.stop(); release('session-1');
+  await assert.rejects(recovering, /cancelled/);
+  assert.ok(service.sessions.codex.writerConflict); assert.equal(service.gate.allowed, false);
+  assert.equal(service.recoveringSession, null); assert.equal(adapter.sent.length, 1);
+});
+test('writer conflict at turn start stops queued desktop intentions without deleting their records', async () => {
+  const { service, adapter } = await fixture();
+  await service.dispatch({ signal: 'chat', message: 'original' }); adapter.finish();
+  let rejectSend, entered;
+  const started = new Promise(r => { entered = r; });
+  adapter.send = () => { entered(); return new Promise((_, reject) => { rejectSend = reject; }); };
+  const first = service.dispatch({ signal: 'assist' }); await started;
+  const queued = await service.dispatch({ signal: 'missing' }); assert.equal(queued.queued, true);
+  rejectSend(writerConflict('session-1')); await assert.rejects(first, /active writer/); await service.queue;
+  assert.equal(service.pendingPings.length, 0);
+  assert.match(service.conversation.rows.find(r => r.id === queued.id).error, /Not sent/);
+  assert.equal(adapter.next, 1); assert.equal(service.gate.allowed, false);
+});
+
+test('failed persistence retains the recovery state and does not poison later retries', async () => {
+  const { service, adapter } = await conflicted();
+  const write = service.store.write; service.store.write = async () => { throw new Error('disk full'); };
+  adapter.resume = async id => id;
+  await assert.rejects(service.recoverSession({ harness: 'codex', sessionId: 'session-1' }), /disk full/);
+  assert.ok(service.sessions.codex.writerConflict); assert.equal(service.busy(), false);
+  service.store.write = write;
+  assert.equal((await service.recoverSession({ harness: 'codex', sessionId: 'session-1' })).recovered, true);
+  adapter.resume = async id => { throw writerConflict(id); };
+  const save = service.saveSessions;
+  service.saveSessions = async () => { if (service.sessions.codex.writerConflict) throw new Error('disk full'); return save.call(service); };
+  await assert.rejects(service.dispatch({ signal: 'chat', message: 'retry' }), /active writer/);
+  await service.queue;
+  assert.equal(service.busy(), false); assert.ok(service.sessions.codex.writerConflict);
+  service.saveSessions = save; adapter.resume = async id => id;
+  assert.equal((await service.recoverSession({ harness: 'codex', sessionId: 'session-1' })).recovered, true);
+});

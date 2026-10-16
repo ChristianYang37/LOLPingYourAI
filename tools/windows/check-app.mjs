@@ -17,24 +17,29 @@ async function launch(expected, change) {
   const env = { ...process.env, LOLPINGAI_DATA_DIR: directory }; delete env.ELECTRON_RUN_AS_NODE;
   if (process.argv.includes('--dsh-protocol')) env.DSH_HOME = join(directory, 'dsh-home');
   const child = spawn(executable, ['--inspect=127.0.0.1:0'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let stderr = '', inspector, exited = false, socket;
-  const exit = new Promise(r => child.on('exit', code => { exited = true; r(code); }));
+  let stderr = '', stdout = '', inspector, exited = false, socket, phase = 'startup', exitSignal, timedOut = false;
+  const started = Date.now();
+  const exit = new Promise(r => child.on('exit', (code, signal) => { exited = true; exitSignal = signal; r(code); }));
+  const closed = new Promise(r => child.once('close', r));
   child.stderr.on('data', data => { stderr += data; inspector ??= stderr.match(/ws:\/\/127\.0\.0\.1:\d+\/[^\s]+/)?.[0]; });
-  child.stdout.resume();
-  const watchdog = setTimeout(() => child.kill(), liveHarness ? 660000 : 60000);
+  child.stdout.on('data', data => { stdout = (stdout + data).slice(-8000); });
+  const watchdog = setTimeout(() => { timedOut = true; console.error(`App watchdog: phase=${phase}, expected=${expected}, elapsed=${Date.now() - started}ms`); child.kill(); }, liveHarness ? 660000 : 60000);
   const wait = async fn => { for (let i = 0; i < 200; i++) { if (exited) throw new Error(`App exited: ${stderr.slice(-2000)}`); const value = await fn(); if (value) return value; await sleep(100); } throw new Error('Packaged app readiness timed out'); };
   try {
+    phase = 'inspector ready';
     await wait(() => inspector);
     socket = new WebSocket(inspector); await new Promise((r,j) => { socket.once('open', r); socket.once('error', j); });
     let id = 0; const pending = new Map();
     socket.on('message', raw => { const m = JSON.parse(raw); if (pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
-    const evaluate = async expression => {
+    const evaluate = async (expression, { allowExit = false } = {}) => {
       const current = ++id; const answer = new Promise(r => pending.set(current, r));
       socket.send(JSON.stringify({ id: current, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }));
-      const response = await Promise.race([answer, exit.then(() => { throw new Error('App exited during inspection'); })]);
+      const response = await Promise.race([answer, exit.then(() => { if (allowExit) return null; throw new Error('App exited during inspection'); })]);
+      if (response === null) return null; // app.quit may exit before the inspector reply.
       assert.ok(!response.error && !response.result.exceptionDetails, JSON.stringify(response));
       return response.result.result.value;
     };
+    phase = 'bridge ready';
     const bridge = await wait(async () => { try { const b = JSON.parse(await readFile(join(directory, 'bridge.json'), 'utf8')); return b.pid === child.pid && b; } catch { return false; } });
     const call = async (method, body = {}) => {
       const response = await fetch(`${bridge.endpoint}/${method}`, { method: 'POST', headers: { Authorization: `Bearer ${bridge.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) });
@@ -43,6 +48,7 @@ async function launch(expected, change) {
     assert.equal((await call('status')).config.regionSize, expected);
     assert.match(await readFile(join(directory, '.agents/skills/lolping-your-ai/SKILL.md'), 'utf8'), /lolping-your-ai/);
     const electron = "process.mainModule.require('electron')";
+    phase = 'renderer ready';
     const renderer = await wait(async () => {
       const values = await evaluate(`Promise.all(${electron}.BrowserWindow.getAllWindows().filter(w=>w.webContents.getURL().includes('/settings/')).map(w=>w.webContents.executeJavaScript('document.body.innerText'))) `);
       return values?.find(text => text.length > 100);
@@ -59,13 +65,24 @@ async function launch(expected, change) {
     }
     if (change) await call('config', { regionSize: change });
     if (change && liveHarness) await (await import('./live-codex.mjs')).liveCodex(directory, liveHarness);
-    // Graceful app quit runs bridge, harness and hook cleanup.
-    socket.send(JSON.stringify({ id: ++id, method: 'Runtime.evaluate', params: { expression: `setImmediate(()=>${electron}.app.quit()); true` } }));
+    // Invoke quit inside the evaluated request, not an inspector-created timer.
+    // A real exit may beat the reply; either way the exit code below must be zero.
+    phase = 'quit request';
+    await evaluate(`${electron}.app.prependOnceListener('before-quit',()=>console.error('[smoke] before-quit')); console.error('[smoke] invoking app.quit'); ${electron}.app.quit(); console.error('[smoke] app.quit returned'); true`, { allowExit: true });
+    phase = 'graceful exit';
     socket.close();
-    assert.equal(await exit, 0, 'App quits cleanly');
+    const code = await exit;
+    assert.equal(code, 0, `App quits cleanly (phase=${phase}, signal=${exitSignal}, watchdog=${timedOut}, elapsed=${Date.now() - started}ms)\n${stderr.slice(-8000)}\n${stdout}`);
+    phase = 'process streams closed';
+    let closeTimer;
+    try { await Promise.race([closed, new Promise((_, reject) => { closeTimer = setTimeout(() => reject(new Error('App output streams did not close after exit')), 5000); })]); }
+    finally { clearTimeout(closeTimer); }
+  } catch (error) {
+    console.error(`Packaged app failure: phase=${phase}, expected=${expected}, pid=${child.pid}, elapsed=${Date.now() - started}ms\n${stderr.slice(-8000)}\n${stdout}`);
+    throw error;
   } finally {
     if (!exited && socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ id: 999999, method: 'Runtime.evaluate', params: { expression: "setImmediate(()=>process.mainModule.require('electron').app.quit()); true" } }));
+      socket.send(JSON.stringify({ id: 999999, method: 'Runtime.evaluate', params: { expression: "process.mainModule.require('electron').app.quit(); true" } }));
       socket.close(); await Promise.race([exit, sleep(5000)]);
     }
     clearTimeout(watchdog); socket?.terminate(); if (!exited) child.kill();

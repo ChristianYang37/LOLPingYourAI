@@ -27,3 +27,8 @@
 .conversation .pending-list { border-top: 1px solid #81939655; padding-top: 8px; }
 @keyframes teammate-breathe { 50% { transform: translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) { .conversation header .working-emote { animation: none; } }
+
+.conversation .session-recovery { color: var(--colorNeutralForeground1, #ddd); margin: 10px; padding: 14px; border: 1px solid #be8b36; border-radius: 10px; background: var(--colorNeutralBackground2, #242424); max-height: 45vh; overflow: auto; flex-shrink: 0; }
+.session-recovery p, .session-recovery li { font-size: 13px; line-height: 1.5; }
+.session-recovery code, .session-recovery pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.session-recovery button { padding: 7px 12px; }

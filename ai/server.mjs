@@ -17,7 +17,7 @@ export const toolDefinitions = [
 export async function startBridge(service, store, extra = {}, { only = null, persist = true } = {}) {
   const token = randomBytes(32).toString('hex');
   const handlers = {
-    status: () => service.status(), models: args => service.listModels(args), conversation: args => service.conversation.page(args), config: args => service.configure(args), ping: args => service.dispatch(args), message: args => service.message(args), stop: () => { service.generation++; return service.stop(); }, bind: args => service.bind(args), approve: args => service.approve(args),
+    status: () => service.status(), models: args => service.listModels(args), conversation: args => service.conversation.page(args), config: args => service.configure(args), ping: args => service.dispatch(args), message: args => service.message(args), stop: () => { service.generation++; return service.stop(); }, recoverSession: args => service.recoverSession(args), bind: args => service.bind(args), approve: args => service.approve(args),
     doctor: async () => ({ desktop: await service.desktop.doctor(), harnesses: await Promise.all(Object.entries(service.adapters).map(async ([name, a]) => { try { return { name, ...await a.capabilities() }; } catch (e) { return { name, error: e.message }; } })) }),
     tools: () => toolDefinitions.filter(t => t.name !== 'submit_icon'),
     get_context: () => service.context ?? { message: 'No ping has been received' },

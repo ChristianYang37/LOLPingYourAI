@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { codexLaunch } from './windows-launch.mjs';
 
 export class CodexAdapter extends EventEmitter {
-  constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); this.models = new Map(); this.cancelEpoch = new Map(); this.effort = 0; }
+  constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); this.models = new Map(); this.resuming = new Map(); this.cancelEpoch = new Map(); this.effort = 0; }
   // Every caller waits for the same initialization; requests sent before `initialized` would be rejected.
   connect() { return this.ready ??= this.start().catch(error => { this.ready = null; throw error; }); }
   async start() {
@@ -34,6 +34,7 @@ export class CodexAdapter extends EventEmitter {
         const pending = this.pending.get(message.id); this.pending.delete(message.id); clearTimeout(pending.timer);
         message.error ? pending.reject(new Error(message.error.message)) : pending.resolve(message.result); return;
       }
+      if (['thread/closed', 'thread/archived'].includes(message.method)) { this.loaded.delete(message.params.threadId); this.models.delete(message.params.threadId); }
       if (message.method === 'turn/started') this.active.set(message.params.threadId, message.params.turn.id);
       if (message.method === 'turn/completed') { this.active.delete(message.params.threadId); this.emit('completed', message.params); }
       if (message.id !== undefined && message.method) {
@@ -69,7 +70,31 @@ export class CodexAdapter extends EventEmitter {
     this.configuredModel ??= result.model;
     this.loaded.add(result.thread.id); this.models.set(result.thread.id, result.model); return result.thread.id;
   }
-  async resume(id) { await this.connect(); if (!this.loaded.has(id)) { await this.modelCatalog(); const result = await this.rpc('thread/resume', { threadId: id, excludeTurns: true, ...(this.configuredProvider ? { modelProvider: this.configuredProvider } : {}) }); this.models.set(id, result.model); this.loaded.add(id); } return id; }
+  // One resume per thread at a time. A recovery always checks native ownership,
+  // rather than treating our loaded cache as proof that the writer is still ours.
+  async resume(id, { force = false } = {}) {
+    await this.connect();
+    if (this.resuming.has(id)) return this.resuming.get(id);
+    if (force) this.loaded.delete(id);
+    if (this.loaded.has(id)) return id;
+    const request = (async () => {
+      await this.modelCatalog();
+      const result = await this.threadRpc('thread/resume', id, { threadId: id, excludeTurns: true, ...(this.configuredProvider ? { modelProvider: this.configuredProvider } : {}) });
+      this.models.set(id, result.model); this.loaded.add(id); return id;
+    })();
+    this.resuming.set(id, request);
+    try { return await request; } finally { if (this.resuming.get(id) === request) this.resuming.delete(id); }
+  }
+  async threadRpc(method, id, params) {
+    try { return await this.rpc(method, params); }
+    catch (error) {
+      if (error.message?.includes(`thread ${id} already has an active writer`)) {
+        this.loaded.delete(id);
+        error.code = 'SESSION_WRITER_CONFLICT'; error.threadId = id;
+      }
+      throw error;
+    }
+  }
   async list() { await this.connect(); return (await this.rpc('thread/list', { limit: 30, cwd: this.cwd })).data ?? []; }
   async restart() {
     if (this.active.size || this.pending.size) throw new Error('Wait for the current Codex operation before refreshing configuration');
@@ -107,7 +132,7 @@ export class CodexAdapter extends EventEmitter {
     this.effectiveModel = model.model; this.effectiveFastMode = this.selection.fastMode;
     const input = [{ type: 'text', text: `$lolping-your-ai\n${prompt}` }, { type: 'skill', name: 'lolping-your-ai', path: this.skillPath }];
     if (image) input.push({ type: 'localImage', path: image });
-    const result = await this.rpc('turn/start', { threadId: id, input, model: model.model, serviceTier, ...(effort ? { effort } : {}) });
+    const result = await this.threadRpc('turn/start', id, { threadId: id, input, model: model.model, serviceTier, ...(effort ? { effort } : {}) });
     this.active.set(id, result.turn.id); return result.turn.id;
   }
   async steer(id, prompt, image) {

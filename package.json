@@ -23,7 +23,8 @@
     "build:desktop": "node native/desktop/build.mjs",
     "test:windows": "node tools/windows/check-native.mjs",
     "test:packaged": "node tools/windows/check-app.mjs",
-    "test:performance": "electron tools/diagnostics/performance.cjs"
+    "test:performance": "electron tools/diagnostics/performance.cjs",
+    "test:codex-writer": "node tools/check-codex-writer.mjs"
   },
   "devDependencies": {
     "@fluentui/react-components": "9.74.9",

@@ -68,7 +68,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
     message: args => service.message(args), followup: args => service.followup(args), wardAction: args => service.wardAction(args),
     copyReply: () => electron.clipboard.writeText(service.task?.text ?? ''), hideCard: () => companion?.hide(), resizeCard: args => companion?.resize(Boolean(args.expanded)),
     testPing: async () => { await new Promise(resolve => setTimeout(resolve, 3000)); return service.dispatch({ signal: 'missing', observeOnly: true, point: screen.getCursorScreenPoint(), message: 'Setup test: briefly describe the visible region, then reply with one onmyway ping. Observe only.' }); },
-    bind: args => service.bind(args), approve: args => service.approve(args),
+    recoverSession: args => service.recoverSession(args), bind: args => service.bind(args), approve: args => service.approve(args),
     candidates: () => icons.list(),
     importCrop: args => icons.submit({ name: args.name || 'My emote', pngBase64: args.pngBase64 }, 'local-crop'),
     importPack: async () => { const picked = await electron.dialog.showOpenDialog({ title: 'Choose a local asset pack', properties: ['openDirectory'] }); if (picked.canceled) return { cancelled: true }; const pack = await load('assets.mjs'); return pack.importAssetPack(picked.filePaths[0], packDir, allTextureNames(), allSoundNames()); },

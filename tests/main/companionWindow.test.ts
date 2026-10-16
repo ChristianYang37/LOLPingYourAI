@@ -5,15 +5,22 @@ import { CompanionWindow } from '../../src/main/companionWindow';
 
 async function fixture() {
   let visible = true;
-  const card = new CompanionWindow(() => ({ task: { id: 'task', signal: 'missing', point: { x: 200, y: 200 } } }));
+  let task: any = { id: 'task', signal: 'missing', point: { x: 200, y: 200 } };
+  const card = new CompanionWindow(() => ({ task }));
   const win = { isVisible: () => visible, isDestroyed: () => false, hide: vi.fn(() => { visible = false; }), showInactive: vi.fn(() => { visible = true; }), getSize: () => [360, 360], setPosition: vi.fn(), webContents: { send: vi.fn() } };
   card.win = win as any;
   await card.update(); win.showInactive.mockClear();
-  return { card, win };
+  return { card, win, clearTask: () => { task = null; } };
 }
 const deferred = () => { let done!: () => void; const promise = new Promise<void>(resolve => { done = resolve; }); return { promise, done }; };
 
 describe('companion visibility during desktop work', () => {
+  it('refreshes and hides a recovered conflict card instead of leaving stale recovery controls', async () => {
+    const { card, win, clearTask } = await fixture();
+    await card.withoutWindow(async () => { clearTask(); await card.update(); });
+    expect(win.isVisible()).toBe(false); expect(win.showInactive).not.toHaveBeenCalled();
+    expect(win.webContents.send).toHaveBeenCalledWith('ai:changed');
+  });
   it('stays hidden through progress updates and restores after a failed action', async () => {
     const { card, win } = await fixture();
     await expect(card.withoutWindow(async () => { await card.update(); expect(win.isVisible()).toBe(false); throw Error('covered by another app'); })).rejects.toThrow('covered');

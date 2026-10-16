@@ -68,6 +68,12 @@ jobs:
       - if: runner.os == 'Windows'
         run: pnpm exec electron-builder --win --publish never --config.extraMetadata.buildCommit=${{ github.sha }}
       - run: node tools/check-packaged-runtime.cjs release
+      - name: NSIS install, app renderer, restart and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/LOLPingYourAI-Setup-*.exe | Select-Object -First 1
+          ./tools/windows/check-installer.ps1 -Installer $installer.FullName
       - name: DSH Windows ACP and packaged model catalog (no API key)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -86,12 +92,6 @@ jobs:
           pnpm test:windows
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tools/windows/check-electron-input.mjs
-      - name: NSIS install, app renderer, restart and uninstall
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem release/LOLPingYourAI-Setup-*.exe | Select-Object -First 1
-          ./tools/windows/check-installer.ps1 -Installer $installer.FullName
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:

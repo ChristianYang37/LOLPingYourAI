@@ -55,3 +55,30 @@ test('explicit refresh reloads changed native configuration without replacing th
     assert.deepEqual(failures, []);
   } finally { a.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test('writer conflicts invalidate only the affected thread and keep its identity', async () => {
+  const a = new CodexAdapter({ mcp: {} });
+  a.connect = async () => {}; a.modelCatalog = async () => [];
+  a.loaded.add('original'); a.loaded.add('other');
+  a.rpc = async () => { throw new Error('thread original already has an active writer'); };
+  await assert.rejects(a.resume('original', { force: true }), e => e.code === 'SESSION_WRITER_CONFLICT' && e.threadId === 'original');
+  assert.equal(a.loaded.has('original'), false); assert.equal(a.loaded.has('other'), true);
+  await assert.rejects(a.threadRpc('turn/start', 'original', {}), e => e.code === 'SESSION_WRITER_CONFLICT');
+  a.rpc = async (method, params) => { assert.equal(method, 'thread/resume'); assert.equal(params.threadId, 'original'); return { model: 'test' }; };
+  assert.equal(await a.resume('original', { force: true }), 'original');
+  assert.equal(a.loaded.has('original'), true);
+});
+
+test('unrelated resume errors are not classified as writer conflicts', async () => {
+  const a = new CodexAdapter({ mcp: {} }); a.rpc = async () => { throw new Error('authentication failed'); };
+  await assert.rejects(a.threadRpc('thread/resume', 'original', {}), e => !e.code && e.message === 'authentication failed');
+});
+
+test('concurrent resumes share the native ownership request', async () => {
+  const a = new CodexAdapter({ mcp: {} }); a.connect = async () => {}; a.modelCatalog = async () => [];
+  let count = 0, release;
+  a.rpc = async () => { count++; return new Promise(r => { release = r; }); };
+  const first = a.resume('s'), second = a.resume('s');
+  await new Promise(r => setImmediate(r)); assert.equal(count, 1);
+  release({ model: 'test' }); assert.deepEqual(await Promise.all([first, second]), ['s', 's']);
+});

@@ -71,7 +71,7 @@ export class Teammate extends EventEmitter {
     await this.wards.init();
   }
   syncReply() {
-    if (this.task?.replyId) this.conversation.update(this.task.replyId, { text: this.task.text, timings: this.task.timings, phase: this.task.phase, error: this.task.error, target: this.task.target ? { app: this.task.target.app, title: this.task.target.title } : undefined });
+    if (this.task?.replyId) this.conversation.update(this.task.replyId, { text: this.task.text, timings: this.task.timings, phase: this.task.phase, error: this.task.error, errorCode: this.task.errorCode, target: this.task.target ? { app: this.task.target.app, title: this.task.target.title } : undefined });
   }
   phase(phase) { if (this.task) { this.task.phase = phase; this.task.updatedAt = this.now(); if (['done', 'error', 'stopped'].includes(phase) && this.task.timings) this.task.timings.totalMs = this.now() - this.task.timings.receivedAt; this.syncReply(); this.emit('change'); } }
   async displayReply(args, harness = this.context?.harness) {
@@ -88,14 +88,25 @@ export class Teammate extends EventEmitter {
     this.admissions++; this.processing = true;
     const job = this.queue.then(async () => {
       try { if (event.generation !== this.generation) return { superseded: true }; return await this.process(event, signal); }
-      finally { this.processing = --this.admissions > 0; queueMicrotask(() => this.pump()); }
+      finally { this.processing = --this.admissions > 0; }
     });
-    this.queue = job.catch(error => { if (event.generation !== this.generation) return; this.gate.pause(); if (this.task) this.task.error = error.message; this.phase('error'); this.notice(error.message); });
+    this.queue = job.catch(async error => {
+      if (event.generation !== this.generation) return;
+      this.handlingFailure = true;
+      try {
+        this.gate.pause();
+        if (this.task) { this.task.error = error.message; this.task.errorCode = error.code; }
+        if (error.code === 'SESSION_WRITER_CONFLICT') await this.recordWriterConflict(event.harness, error);
+        this.phase('error'); await this.conversation.flush(); this.notice(error.message);
+      } catch (saveError) { this.phase('error'); this.notice(`Could not persist session recovery state: ${saveError.message}`); }
+      finally { this.handlingFailure = false; this.emit('change'); }
+    });
+    void this.queue.then(() => this.pump(), error => this.notice(error.message));
     return job;
   }
   notice(text) { this.emit('notice', text); }
-  busy() { return Boolean(this.refreshingModels) || Object.values(this.adapters).some(a => a.active.size > 0); }
-  status({ diagnostic = true } = {}) { return { config: this.config, effectiveEffort: this.adapters[this.config.harness]?.effectiveEffort, observedModel: this.adapters[this.config.harness]?.observedModel, settingsAcknowledged: this.adapters[this.config.harness]?.settingsAcknowledged, effectiveModel: this.adapters[this.config.harness]?.effectiveModel, effectiveFastMode: this.adapters[this.config.harness]?.effectiveFastMode, sessions: this.sessions, busy: this.busy() || this.processing, task: this.task, pending: this.pendingPings.map(({ event }) => ({ id: event.id, signal: event.signal, target: event.target })), context: this.context, wards: this.wards?.items ?? [], history: diagnostic ? this.history : undefined, conversation: this.conversation?.page(), approvals: this.approvals, signals }; }
+  busy() { return Boolean(this.handlingFailure || this.recoveringSession || this.refreshingModels) || Object.values(this.adapters).some(a => a.active.size > 0); }
+  status({ diagnostic = true } = {}) { return { config: this.config, effectiveEffort: this.adapters[this.config.harness]?.effectiveEffort, observedModel: this.adapters[this.config.harness]?.observedModel, settingsAcknowledged: this.adapters[this.config.harness]?.settingsAcknowledged, effectiveModel: this.adapters[this.config.harness]?.effectiveModel, effectiveFastMode: this.adapters[this.config.harness]?.effectiveFastMode, sessions: this.sessions, recoveringSession: this.recoveringSession, busy: this.busy() || this.processing, task: this.task, pending: this.pendingPings.map(({ event }) => ({ id: event.id, signal: event.signal, target: event.target })), context: this.context, wards: this.wards?.items ?? [], history: diagnostic ? this.history : undefined, conversation: this.conversation?.page(), approvals: this.approvals, signals }; }
   async listModels({ harness = this.config.harness, refresh = false } = {}) {
     const adapter = this.adapters[harness]; if (!adapter) throw new Error('Unknown harness');
     if (this.busy() || this.processing) throw new Error('Finish or stop the current task before refreshing models');
@@ -106,6 +117,11 @@ export class Teammate extends EventEmitter {
   async configure(patch) { this.config = validateConfig({ ...this.config, ...patch }); if (!this.config.diagnosticsEnabled) this.history = []; await this.store.write('ai-config', this.config); this.emit('change'); return this.config; }
   async dispatch(raw) {
     if (raw.source === 'agent' || raw.source === 'remote') return { ignored: true };
+    const conflict = this.sessions[raw.harness ?? this.config.harness]?.writerConflict;
+    if (conflict && raw.signal !== 'retreat' && (raw.signal === 'chat' || signalFor(this.config, raw.signal).mode !== 'stop')) {
+      this.notice('Session is in use by another Codex client. Open chat to reconnect the original session.');
+      throw Object.assign(new Error('SESSION_WRITER_CONFLICT: reconnect the original session from chat before sending again'), { code: 'SESSION_WRITER_CONFLICT' });
+    }
     const id = raw.id ?? randomUUID();
     if (this.seen.has(id)) return { duplicate: true };
     let signal = raw.signal === 'chat' ? { mode: 'chat', prompt: 'Respond to the user’s text message.' } : signalFor(this.config, raw.signal);
@@ -229,6 +245,40 @@ export class Teammate extends EventEmitter {
     this.emit('change'); return { delivered: true, session: session.id, contextId: context.id };
   }
   saveSessions() { return this.store.write('ai-sessions', this.sessions); }
+  async recordWriterConflict(harness, error) {
+    const session = this.sessions[harness];
+    if (!session?.id || session.id !== error.threadId) return;
+    this.gate.pause();
+    session.writerConflict = { code: 'SESSION_WRITER_CONFLICT', detail: error.message, time: this.now() };
+    // Queued input has not been sent to the model. Keep its display history, but
+    // never replay old desktop intentions automatically after ownership changes.
+    for (const { event } of this.pendingPings) this.conversation.update(event.id, { error: 'Not sent: session ownership conflict. Reconnect and send again.' });
+    this.pendingPings.length = 0;
+    await this.saveSessions(); await this.conversation.flush(); this.emit('change');
+  }
+  async recoverSession({ harness, sessionId }) {
+    const adapter = this.adapters[harness], session = this.sessions[harness];
+    if (harness !== 'codex' || !adapter || !session?.writerConflict || session.id !== sessionId) throw new Error('Session recovery is stale; refresh the conversation');
+    if (this.busy() || this.processing) throw new Error('Wait for the current operation before reconnecting');
+    const generation = this.generation;
+    this.recoveringSession = { harness, sessionId }; this.gate.pause(); this.emit('change');
+    try {
+      await adapter.resume(sessionId, { force: true });
+      if (generation !== this.generation || this.sessions[harness] !== session) throw new Error('Session recovery was cancelled; retry when ready');
+      const conflict = session.writerConflict;
+      delete session.writerConflict;
+      try { await this.saveSessions(); }
+      catch (error) { session.writerConflict = conflict; throw error; }
+      if (this.context?.harness === harness && this.task?.errorCode === 'SESSION_WRITER_CONFLICT') {
+        this.task = null; this.context = null; // Keep the failed entry intact as historical evidence.
+      }
+      return { recovered: true, sessionId, replayed: false };
+    } catch (error) {
+      if (error.code === 'SESSION_WRITER_CONFLICT' && this.sessions[harness] === session) await this.recordWriterConflict(harness, error);
+      throw error;
+    } finally { this.recoveringSession = null; this.emit('change'); }
+  }
+
   waitForCompletion(harness, id) {
     const adapter = this.adapters[harness];
     if (!adapter.active.has(id)) return this.outcomes.get(`${harness}:${id}`) === 'completed' ? Promise.resolve() : Promise.reject(new Error('Follow-up did not complete successfully'));
