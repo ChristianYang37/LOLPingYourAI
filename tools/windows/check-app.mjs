@@ -20,11 +20,13 @@ async function launch(expected, change) {
   let stderr = '', stdout = '', inspector, exited = false, socket, phase = 'startup', exitSignal, timedOut = false;
   const started = Date.now();
   const exit = new Promise(r => child.on('exit', (code, signal) => { exited = true; exitSignal = signal; r(code); }));
+  const closed = new Promise(r => child.once('close', r));
   child.stderr.on('data', data => { stderr += data; inspector ??= stderr.match(/ws:\/\/127\.0\.0\.1:\d+\/[^\s]+/)?.[0]; });
   child.stdout.on('data', data => { stdout = (stdout + data).slice(-8000); });
   const watchdog = setTimeout(() => { timedOut = true; console.error(`App watchdog: phase=${phase}, expected=${expected}, elapsed=${Date.now() - started}ms`); child.kill(); }, liveHarness ? 660000 : 60000);
   const wait = async fn => { for (let i = 0; i < 200; i++) { if (exited) throw new Error(`App exited: ${stderr.slice(-2000)}`); const value = await fn(); if (value) return value; await sleep(100); } throw new Error('Packaged app readiness timed out'); };
   try {
+    phase = 'inspector ready';
     await wait(() => inspector);
     socket = new WebSocket(inspector); await new Promise((r,j) => { socket.once('open', r); socket.once('error', j); });
     let id = 0; const pending = new Map();
@@ -37,6 +39,7 @@ async function launch(expected, change) {
       assert.ok(!response.error && !response.result.exceptionDetails, JSON.stringify(response));
       return response.result.result.value;
     };
+    phase = 'bridge ready';
     const bridge = await wait(async () => { try { const b = JSON.parse(await readFile(join(directory, 'bridge.json'), 'utf8')); return b.pid === child.pid && b; } catch { return false; } });
     const call = async (method, body = {}) => {
       const response = await fetch(`${bridge.endpoint}/${method}`, { method: 'POST', headers: { Authorization: `Bearer ${bridge.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) });
@@ -45,6 +48,7 @@ async function launch(expected, change) {
     assert.equal((await call('status')).config.regionSize, expected);
     assert.match(await readFile(join(directory, '.agents/skills/lolping-your-ai/SKILL.md'), 'utf8'), /lolping-your-ai/);
     const electron = "process.mainModule.require('electron')";
+    phase = 'renderer ready';
     const renderer = await wait(async () => {
       const values = await evaluate(`Promise.all(${electron}.BrowserWindow.getAllWindows().filter(w=>w.webContents.getURL().includes('/settings/')).map(w=>w.webContents.executeJavaScript('document.body.innerText'))) `);
       return values?.find(text => text.length > 100);
@@ -69,6 +73,13 @@ async function launch(expected, change) {
     socket.close();
     const code = await exit;
     assert.equal(code, 0, `App quits cleanly (phase=${phase}, signal=${exitSignal}, watchdog=${timedOut}, elapsed=${Date.now() - started}ms)\n${stderr.slice(-8000)}\n${stdout}`);
+    phase = 'process streams closed';
+    let closeTimer;
+    try { await Promise.race([closed, new Promise((_, reject) => { closeTimer = setTimeout(() => reject(new Error('App output streams did not close after exit')), 5000); })]); }
+    finally { clearTimeout(closeTimer); }
+  } catch (error) {
+    console.error(`Packaged app failure: phase=${phase}, expected=${expected}, pid=${child.pid}, elapsed=${Date.now() - started}ms\n${stderr.slice(-8000)}\n${stdout}`);
+    throw error;
   } finally {
     if (!exited && socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ id: 999999, method: 'Runtime.evaluate', params: { expression: "process.mainModule.require('electron').app.quit(); true" } }));
