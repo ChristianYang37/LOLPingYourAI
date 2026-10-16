@@ -96,7 +96,7 @@ app.whenReady().then(async () => {
     assert.equal(await js("document.documentElement.scrollWidth <= innerWidth"), true);
     assert.equal(await js("document.querySelector('.conversation-full form').getBoundingClientRect().bottom <= innerHeight"), true);
     writeFileSync(path.join(tmpdir(), 'lolping-chat-small-dark.png'), (await win.webContents.capturePage()).toPNG());
-    state = { ...state, busy: true, task: { id: 'working-rich', startedAt: Date.now(), phase: 'working', mode: 'explore', target: { app: 'Practice board' }, preview: { file: 'ping-1.png', capturedAt: Date.now(), region: { imageWidth: 512, imageHeight: 512 } }, text: '# Explanation\n\n$$E=mc^2$$\n\n```js\nconst answer = 42;\n```\n\n<script>window.bad = true</script>\n\n![remote](https://example.invalid/tracker.png)' } };
+    state = { ...state, busy: true, task: { id: 'working-rich', startedAt: Date.now(), phase: 'working', mode: 'explore', target: { app: 'Practice board' }, preview: { file: 'ping-1.png', capturedAt: Date.now(), region: { imageWidth: 512, imageHeight: 512 } }, text: '# Explanation\n\n\\[E=mc^2\\]\n\n```js\nconst answer = 42;\n```\n\n<script>window.bad = true</script>\n\n![remote](https://example.invalid/tracker.png)' } };
     const floating = new BrowserWindow({ show: false, width: 360, height: 360, webPreferences: { backgroundThrottling: false, preload: path.resolve('out/preload/companion.js') } });
     await floating.loadURL('lolping://app/companion/index.html');
     const fjs = code => floating.webContents.executeJavaScript(code);

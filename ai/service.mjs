@@ -204,7 +204,7 @@ export class Teammate extends EventEmitter {
     await this.conversation.flush();
     current();
     if (['explore', 'execute', 'interrupt'].includes(signal.mode)) this.gate.enable();
-    if (event.signal === 'bait' && this.config.banter) session.teasePending = true;
+    if (event.signal === 'bait' && signal.mode !== 'emotion' && this.config.banter) session.teasePending = true;
     const prompt = signal.mode === 'chat' ? [
       `LOLPingYourAI text conversation. Context ID: ${context.id}.`,
       event.message,

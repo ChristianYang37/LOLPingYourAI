@@ -389,3 +389,13 @@ test('an explicit observe-only setup ping cannot inherit exploration permissions
   assert.equal(service.context.mode, 'observe');
   await assert.rejects(service.action({ contextId: turn.contextId, action: 'scroll' }), /not authorized/); service.close();
 });
+
+test('standalone taunting does not append a duplicate completion comeback', async () => {
+  const { service, adapter } = await fixture(); const replies = [];
+  service.desktop.reply = async args => replies.push(args.signal);
+  const turn = await service.dispatch({ signal: 'bait' });
+  await service.reply({ contextId: turn.contextId, signal: 'bait', meaning: 'reaction' });
+  await service.reply({ contextId: turn.contextId, signal: 'missing', meaning: 'reaction' });
+  adapter.finish(); await new Promise(r => setImmediate(r));
+  assert.deepEqual(replies, ['bait', 'missing']); service.close();
+});
