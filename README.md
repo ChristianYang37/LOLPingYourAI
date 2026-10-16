@@ -252,3 +252,5 @@ Connection & diagnostics is off by default. Enable it explicitly in Settings →
 
 
 The chat shows the request capture and latest agent view, with Markdown tables, fenced code and LaTeX math. A generated working emote stays beside streaming output during active desktop tasks. Nearby repeated question marks add tone to the same request when the target identity matches; emotional emotes invite playful replies without starting edits. See [interaction behavior and validation](docs/interaction-ux.md).
+
+[Contributing and PR workflow](CONTRIBUTING.md) · [Release procedure](docs/releasing.md)

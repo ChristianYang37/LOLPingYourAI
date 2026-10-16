@@ -252,3 +252,5 @@ pnpm dist                                       # Windows x64 安装包（需在
 
 
 聊天显示请求截图与 agent 最新观察，支持 Markdown 表格、代码块和 LaTeX 数学公式。桌面任务进行时，工作表情与流式输出常驻浮窗；同一目标附近连续问号会补充语气，情绪表情允许夸张回敬，不自动启动编辑。详见[交互设计与验证](docs/interaction-ux.md)。
+
+[贡献与 PR 流程](CONTRIBUTING.zh-CN.md) · [发布流程](docs/releasing.md)
