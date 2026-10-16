@@ -3,7 +3,7 @@ import { app, dialog, Menu, shell, systemPreferences } from 'electron';
 import { randomInt } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { hotkeyLabel } from '../shared/keys';
@@ -127,7 +127,9 @@ async function start(): Promise<void> {
     tray.set(trayMode(), enabled);
     settingsWindow()?.webContents.send(SETTINGS_CH.statusChanged, status());
   }
+  const buildCommit = (() => { try { return JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).buildCommit; } catch { return undefined; } })();
   const about = (): About => ({
+    buildCommit,
     version: app.getVersion(),
     problems: [
       ...store.problems,

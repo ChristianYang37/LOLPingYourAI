@@ -8,3 +8,22 @@
 .conversation input { min-width: 0; flex: 1; border: 1px solid #637779; border-radius: 6px; background: transparent; color: inherit; padding: 7px; font: inherit; }
 .conversation button:disabled { opacity: .4; }.conversation [role=alert] { color: #ed8888; }
 .conversation pre { white-space: pre-wrap; overflow-wrap: anywhere; }.conversation label { display: block; }.conversation label input { display: block; width: 90%; }
+
+.conversation .markdown-reply { overflow-wrap: anywhere; min-width: 0; }
+.conversation .markdown-reply p { white-space: normal; }
+.conversation .markdown-reply pre { white-space: pre; overflow-x: auto; padding: 12px; border-radius: 8px; background: #111a2420; }
+.conversation .markdown-reply table { border-collapse: collapse; display: block; overflow-x: auto; }
+.conversation .markdown-reply th, .conversation .markdown-reply td { padding: 6px 10px; border: 1px solid #81939655; }
+.conversation .markdown-reply a { color: #329d98; }
+.conversation .markdown-reply .katex-display { overflow-x: auto; overflow-y: hidden; }
+.conversation .capture-preview { margin: 10px 0; padding: 10px; border: 1px solid #81939655; border-radius: 12px; }
+.capture-preview figcaption { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; overflow-wrap: anywhere; }
+.capture-preview figcaption span { opacity: .7; }
+.capture-preview button { display: block; margin: 8px 0; padding: 0; background: transparent; border: 0; }
+.capture-preview img { display: block; width: 128px; max-width: 100%; border-radius: 6px; }
+.capture-preview.capture-expanded img { width: 512px; }
+.conversation header .working-emote { width: 62px; height: 62px; animation: teammate-breathe 2.6s ease-in-out infinite; }
+.conversation.is-working:not(.conversation-full) .reply-text { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.conversation .pending-list { border-top: 1px solid #81939655; padding-top: 8px; }
+@keyframes teammate-breathe { 50% { transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .conversation header .working-emote { animation: none; } }

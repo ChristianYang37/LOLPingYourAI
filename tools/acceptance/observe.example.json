@@ -6,7 +6,8 @@
       "message": "Describe only the visible Test Board. Do not edit anything.",
       "after": "done",
       "timeoutMs": 120000,
-      "expectText": "Ready for a ping."
+      "expectText": "Ready for a ping.",
+      "observeOnly": true
     }
   ]
 }

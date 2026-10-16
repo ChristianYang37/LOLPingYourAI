@@ -29,6 +29,7 @@ export function AboutSection({ icon, update }: { icon: ReactNode; update: Update
         description={(
           <>
             {t.aboutDesc(about.version)}
+            {about.buildCommit && <span className="desc">Build {about.buildCommit.slice(0, 12)}</span>}
             {note ? <span className="desc">{note}</span> : null}
           </>
         )}>

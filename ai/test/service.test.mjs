@@ -38,7 +38,7 @@ test('remote/agent replies never dispatch; duplicate input runs once', async () 
 test('read-only context rejects actions, stale contexts remain invalid', async () => {
   const { service, adapter } = await fixture(); const first = await service.dispatch({ signal: 'assist' });
   await service.action({ contextId: first.contextId, action: 'click' });
-  adapter.finish(); const next = await service.dispatch({ signal: 'missing' });
+  adapter.finish(); const next = await service.dispatch({ signal: 'generic' });
   await assert.rejects(service.action({ contextId: first.contextId, action: 'click' }), /Stale/);
   await assert.rejects(service.action({ contextId: next.contextId, action: 'click' }), /not authorized/);
 });
@@ -124,7 +124,7 @@ test('normal pings queue without cancelling; moved targets are captured fresh wh
   assert.equal((await service.dispatch({ signal: 'missing', point: { x: 12, y: 34 } })).queued, true);
   assert.equal(captures, 0); assert.equal(service.context.id, first.contextId); assert.equal(service.gate.allowed, true); assert.deepEqual(adapter.cancelled, []);
   adapter.finish(); await new Promise(r => setImmediate(r)); await service.queue;
-  assert.equal(captures, 1); assert.equal(adapter.sent.length, 2); assert.equal(service.gate.allowed, false);
+  assert.equal(captures, 1); assert.equal(adapter.sent.length, 2); assert.equal(service.gate.allowed, true);
 });
 
 test('ward and clear ward neither cancel the active turn nor replace its context', async () => {
@@ -322,4 +322,80 @@ test('Claude partial text appears before completion, complete message does not d
   adapter.emit('event', { method: 'claude/message', params: { threadId: turn.session, type: 'assistant', textHandled: true, message: {content:[{type:'text',text:'Hello there'}]} } });
   assert.equal(service.task.text, 'Hello there'); time(200); adapter.finish();
   assert.equal(service.task.timings.totalMs, 100); service.close();
+});
+
+
+test('question exploration allows navigation but not arbitrary typing, wards stay read-only', async () => {
+  const { service, adapter } = await fixture();
+  const turn = await service.dispatch({ signal: 'missing' });
+  assert.equal(service.context.mode, 'explore');
+  await service.action({ contextId: turn.contextId, action: 'scroll', x: 50, y: 50, delta: 100 });
+  await service.action({ contextId: turn.contextId, action: 'click', purpose: 'Expand the relevant definition', x: 50, y: 50 });
+  await assert.rejects(service.action({ contextId: turn.contextId, action: 'type', text: 'edit' }), /Exploration/);
+  await assert.rejects(service.action({ contextId: turn.contextId, action: 'key', key: 'Cmd+S' }), /shortcut/);
+  await assert.rejects(service.action({ contextId: turn.contextId, action: 'click' }), /purpose/);
+  adapter.finish(); const ward = await service.dispatch({ source: 'timer', signal: 'missing' });
+  assert.equal(service.context.mode, 'observe');
+  await assert.rejects(service.action({ contextId: ward.contextId, action: 'scroll' }), /not authorized/);
+  service.close();
+});
+test('nearby repeated question steers one task, keeps count and does not group different targets', async () => {
+  const { service, adapter } = await fixture();
+  let id = 'one'; service.desktop.locate = async () => ({ id, pid: 2 });
+  const first = await service.dispatch({ signal: 'missing', point: { x: 60, y: 70 } });
+  // Fixture capture returns a generic target; production capture keeps locate identity.
+  service.expression.event.target = { id, pid: 2 };
+  const second = await service.dispatch({ signal: 'missing', point: { x: 62, y: 71 } });
+  assert.equal(second.grouped, true); assert.equal(service.context.expression.count, 2);
+  assert.equal(adapter.sent.length, 2); assert.equal(adapter.sent[1].steer, true);
+  assert.match(adapter.sent[1].prompt, /repeated this signal 2 times/);
+  assert.equal(service.pendingPings.length, 0);
+  id = 'another'; const third = await service.dispatch({ signal: 'missing', point: { x: 62, y: 71 } });
+  assert.equal(third.queued, true); assert.equal(service.pendingPings.length, 1);
+  await service.dispatch({ signal: 'retreat' }); assert.equal(service.pendingPings.length, 0);
+  await assert.rejects(service.action({ contextId: first.contextId, action: 'scroll' }), /not authorized/); service.close();
+});
+test('emotions do not capture or authorize editing; a comeback question is not a request for input', async () => {
+  const { service } = await fixture();
+  service.desktop.locate = async () => ({ id: 'window', pid: 2 });
+  service.desktop.capture = async () => { throw new Error('Unnecessary capture'); };
+  const turn = await service.dispatch({ signal: 'bait', point: { x: 60, y: 70 } });
+  await service.reply({ contextId: turn.contextId, signal: 'missing', caption: 'Your move?' });
+  assert.notEqual(service.task.phase, 'waiting');
+  await assert.rejects(service.action({ contextId: turn.contextId, action: 'type', text: 'oops' }), /not authorized/); service.close();
+});
+test('preview preserves original capture and separately follows agent screenshots', async () => {
+  const { service } = await fixture(); let n = 0;
+  const original = service.desktop.capture;
+  service.desktop.capture = async (...args) => ({ ...await original(...args), imagePath: `/local/ping-${++n}.png` });
+  const turn = await service.dispatch({ signal: 'missing' });
+  await service.screenshot(turn.contextId, { x: 50, y: 60 });
+  assert.equal(service.conversation.rows.find(row => row.id === turn.contextId).preview.file, 'ping-1.png');
+  assert.equal(service.task.preview.file, 'ping-2.png');
+  await assert.rejects(service.screenshot(turn.contextId, { x: -100, y: -100 }), /inside/); service.close();
+});
+
+test('playful question during real work does not incorrectly wait for an answer', async () => {
+  const { service } = await fixture(); const turn = await service.dispatch({ signal: 'assist' });
+  await service.reply({ contextId: turn.contextId, signal: 'missing', meaning: 'reaction' });
+  assert.notEqual(service.task.phase, 'waiting');
+  await service.reply({ contextId: turn.contextId, signal: 'missing', meaning: 'clarification' });
+  assert.equal(service.task.phase, 'waiting'); service.close();
+});
+
+test('an explicit observe-only setup ping cannot inherit exploration permissions', async () => {
+  const { service } = await fixture();
+  const turn = await service.dispatch({ signal: 'missing', observeOnly: true });
+  assert.equal(service.context.mode, 'observe');
+  await assert.rejects(service.action({ contextId: turn.contextId, action: 'scroll' }), /not authorized/); service.close();
+});
+
+test('standalone taunting does not append a duplicate completion comeback', async () => {
+  const { service, adapter } = await fixture(); const replies = [];
+  service.desktop.reply = async args => replies.push(args.signal);
+  const turn = await service.dispatch({ signal: 'bait' });
+  await service.reply({ contextId: turn.contextId, signal: 'bait', meaning: 'reaction' });
+  await service.reply({ contextId: turn.contextId, signal: 'missing', meaning: 'reaction' });
+  adapter.finish(); await new Promise(r => setImmediate(r));
+  assert.deepEqual(replies, ['bait', 'missing']); service.close();
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 // A local display log, never a replacement for the harness's context/history.
-// Deliberately excludes screenshots, tool payloads, credentials and raw prompts.
+// Stores capture references only (never image bytes), excluding tool payloads, credentials and raw prompts.
 export class ConversationLog {
   constructor(store, { now = Date.now, onError = () => {} } = {}) {
     Object.assign(this, { store, now, onError }); this.rows = []; this.positions = new Map(); this.timer = null;

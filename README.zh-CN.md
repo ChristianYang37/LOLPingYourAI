@@ -60,7 +60,7 @@
 - 思考强度默认 **0**，即当前模型最低档；**1** 是第二低档，超出范围取最高档。启动一轮后显示实际生效值。DSH 默认开启思考，数字只计算开启档，关闭思考使用独立开关。
 - 新增 **DeepSeek Harness（DSH）ACP** 适配，详见[安装、免费 API 配置与验证范围](docs/dsh.md#中文)。
 
-聊天首页已包含在 v0.1.2 Windows 版中；旧版 v0.1.1 macOS 安装包早于聊天首页的整合。
+v0.1.3 将聊天首页、上游交互改进和探索反馈统一带入双平台安装包；下载资产在发布 tag 的 CI 通过后出现。
 
 ## 轮盘与桌面改进（当前源码）
 
@@ -70,13 +70,13 @@
 - 可选的「**反向问号 `¿`**」位于信号池，可拖进槽位；它沿用问号指令，包括你对问号的自定义内容。敌方视野在轮盘与桌面上统一使用红色图标。
 - Windows 覆盖层底部留出 1 DIP，并在新内容出现前重新置顶，agent 排队回复也适用。macOS 覆盖层不进入 Mission Control，点击回放保留双击／三击次数，设置窗口从 Dock 恢复后重建材质。当前 macOS 源码要求 **Apple Silicon、macOS 13+**。
 
-这些改动尚未包含在已有 v0.1.1 Mac / v0.1.2 Windows 安装包中。[迁移来源与验证范围](docs/upstream-migration.md)。
+v0.1.3 将聊天首页、上游交互改进和探索反馈统一带入双平台安装包；下载资产在发布 tag 的 CI 通过后出现。
 
 ## 信号
 
 | | 信号 | 队友会… |
 |:-:|---|---|
-| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **问号** | 解释这个区域；只看不改。 |
+| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **问号** | 主动探索并解释选中区域，按需要翻阅页面、检索相关历史与文件。 |
 | <img src="assets/textures/assist_me.png" width="30" alt=""> | **求助** | 检查进度并帮你做完；先检索上下文，意图仍不明确时再问。 |
 | <img src="assets/textures/pingwheel_retreatrender.png" width="30" alt=""> | **危险** | 立即中断，看最新截图和你的纠正，再重新判断。 |
 | <img src="assets/textures/omw.png" width="30" alt=""> | **正在路上** | 铺满目标窗口，用可恢复的方式改善阅读。 |
@@ -113,9 +113,9 @@ sequenceDiagram
 
 ## 快速开始（macOS）
 
-已有 v0.1.1 macOS 安装包早于聊天首页整合；macOS 用户可从当前源码构建体验这些变化。
+v0.1.3 将聊天首页、上游交互改进和探索反馈统一带入双平台安装包；下载资产在发布 tag 的 CI 通过后出现。
 
-1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.1) 下载 **LOLPingYourAI-0.1.1-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
+1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.3) 下载 **LOLPingYourAI-0.1.3-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
 2. **连接队友**：安装 [Codex CLI](https://developers.openai.com/codex/cli/) 并执行 `codex login`；Codex 桌面应用自带的 CLI 会被自动找到。Claude 目前为实验性支持（见[平台状态](#平台状态)）。
 3. **授权**：打开应用，在「系统设置 → 隐私与安全性」中为 LOLPingYourAI 开启**辅助功能**和**录屏与系统录音**，然后重启应用。设置里的 **AI Teammate / 你的队友** 会显示两项检查结果。
 4. **开始 ping**：鼠标停在任意内容上，按住 <kbd>⌥ Option</kbd> + 左键拖动，在 **？** 上松开。<kbd>⌃ Control</kbd> + 拖动打开表情轮盘。
@@ -140,7 +140,7 @@ sequenceDiagram
 
 ## 快速开始（Windows x64）
 
-在 [v0.1.2 发布页](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.2) 下载 **LOLPingYourAI-Setup-0.1.2.exe**，按用户安装，连接本机已登录的 Codex CLI，并在设置页确认触发键。启动前退出其他 lolPing/LOLPingYourAI 实例。当前安装包未签名。
+在 [v0.1.3 发布页](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.3) 下载 **LOLPingYourAI-Setup-0.1.3.exe**，按用户安装，连接本机已登录的 Codex CLI，并在设置页确认触发键。启动前退出其他 lolPing/LOLPingYourAI 实例。当前安装包未签名。
 
 支持查找 Windows Codex 桌面应用内置程序和标准 npm 安装；必要时在启动前将 `LOLPINGAI_CODEX` 设为 `codex.exe` 的绝对路径。紧急停止键为 **Ctrl+Alt+Esc**。构建、测试和验证边界见 [Windows 说明](docs/windows.md)。
 
@@ -158,7 +158,7 @@ sequenceDiagram
 ## 安全与隐私
 
 - **只在本机**：MCP 服务通过回环地址和每次启动随机生成的令牌与应用通信，拒绝来自浏览器页面的请求。截图、会话、插眼和令牌保存在 `~/Library/Application Support/LOLPingYourAI`（Windows 为 `%APPDATA%/LOLPingYourAI`），不会进入 Git。
-- **操作有边界**：问号和插眼回访不能点击或输入；每次操作前重新确认窗口身份，窗口移动后旧坐标作废；目标关闭、锁屏或无法确定时明确报错。
+- **操作有边界**：问号默认允许为理解页面而导航；明确的仅观察模式和插眼回访不能点击或输入；每次操作前重新确认窗口身份，窗口移动后旧坐标作废；目标关闭、锁屏或无法确定时明确报错。
 - **数据只发给你选的服务**：截图区域和指令只会以你现有的账号发送给你选择的 harness 和模型。
 - **Claude 的工具**：只开放只读的 `Read`、`Grep`、`Glob` 和桌面工具。工具调用前的钩子会拒绝凭据目录、密钥文件、对整个用户目录的检索以及其他所有工具，即使你的全局 Claude 设置允许它们。
 - **不是沙箱**：这些限制保护的是本项目自带的后端；你另外给 harness 装的插件不在范围内。
@@ -250,5 +250,7 @@ pnpm dist                                       # Windows x64 安装包（需在
 
 连接与诊断默认关闭；需要排查时，在设置 → AI 队友中显式开启。关闭后不收集原始协议事件，聊天与信号记录正常保留。性能 CI 的范围、预算及本机测量见[性能测试说明](docs/performance.md)。
 
+
+聊天显示请求截图与 agent 最新观察，支持 Markdown 表格、代码块和 LaTeX 数学公式。桌面任务进行时，工作表情与流式输出常驻浮窗；同一目标附近连续问号会补充语气，情绪表情允许夸张回敬，不自动启动编辑。详见[交互设计与验证](docs/interaction-ux.md)。
 
 [贡献与 PR 流程](CONTRIBUTING.zh-CN.md) · [发布流程](docs/releasing.md)
