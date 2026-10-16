@@ -249,3 +249,6 @@ Derived from [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1, wh
 League of Legends artwork, animations and audio © Riot Games, Inc. They are **not** covered by the MIT license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is an independent fan project, not endorsed by Riot Games, OpenAI or Anthropic.
 
 Connection & diagnostics is off by default. Enable it explicitly in Settings → AI Teammate when troubleshooting. With it off, raw protocol events are not collected; chat and ping history remain available. See [performance testing](docs/performance.md) for CI scope, budgets and local measurements.
+
+
+[Contributing and PR workflow](CONTRIBUTING.md) · [Release procedure](docs/releasing.md)
