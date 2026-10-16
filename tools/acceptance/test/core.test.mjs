@@ -159,11 +159,13 @@ test('watch keeps duplicate events at the same timestamp instead of dropping the
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   t.after(() => { server.closeAllConnections(); server.close(); });
   await writeFile(join(dir, 'bridge.json'), JSON.stringify({ endpoint: `http://127.0.0.1:${server.address().port}`, token: 'fixture' }));
-  const code = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [fileURLToPath(new URL('../run.mjs', import.meta.url)), 'watch', '--seconds', '0.05', '--data-dir', dir, '--output', output], { stdio: 'ignore' });
-    child.on('error', reject); child.on('close', resolve);
+  // This verifies event retention, not a 50 ms HTTP/startup latency budget.
+  const { code, stderr } = await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [fileURLToPath(new URL('../run.mjs', import.meta.url)), 'watch', '--seconds', '2', '--data-dir', dir, '--output', output], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = ''; child.stderr.on('data', data => { stderr += data; });
+    child.on('error', reject); child.on('close', code => resolve({ code, stderr }));
   });
-  assert.equal(code, 0);
+  assert.equal(code, 0, stderr);
   assert.equal((await readFile(output, 'utf8')).trim().split('\n').map(l => JSON.parse(l)).filter(e => e.kind === 'event').length, 2);
 });
 test('Test Board publishes fresh native identity, values and bounds without enabling AX', async () => {
