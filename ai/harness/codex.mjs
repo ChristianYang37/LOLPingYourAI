@@ -3,6 +3,10 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 import { codexLaunch } from './windows-launch.mjs';
+import { toolDefinitions } from '../server.mjs';
+
+const desktopAction = toolDefinitions.find(tool => tool.name === 'desktop_action');
+const nativeAction = { ...desktopAction, type: 'function', name: 'lolping_desktop_action' };
 
 export class CodexAdapter extends EventEmitter {
   constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); this.models = new Map(); this.resuming = new Map(); this.cancelEpoch = new Map(); this.effort = 0; }
@@ -10,6 +14,13 @@ export class CodexAdapter extends EventEmitter {
   connect() { return this.ready ??= this.start().catch(error => { this.ready = null; throw error; }); }
   async start() {
     const args = ['app-server', '--listen', 'stdio://', '-c', 'mcp_servers.lolpingyourai.default_tools_approval_mode="approve"'];
+    // These vendor tools accept arbitrary programs; the scoped prototype only exposes single actions.
+    if (this.desktopAction) {
+      // Disabled stdio entries still require a valid transport in the App Server config.
+      const disabled = `{ command = ${JSON.stringify(process.execPath)}, enabled = false }`;
+      args.push('-c', `mcp_servers.cua_repl=${disabled}`, '-c', `mcp_servers.computer-use=${disabled}`,
+        '-c', 'plugins."unified-computer-use@openai-bundled".enabled=false', '-c', 'plugins."computer-use@openai-bundled".enabled=false');
+    }
     const entries = { command: this.mcp.command, args: this.mcp.args, env_vars: Object.keys(this.mcp.env) };
     for (const [key, value] of Object.entries(entries)) {
       if (key === 'env') { for (const [k, v] of Object.entries(value)) args.push('-c', `mcp_servers.lolpingyourai.env.${k}=${JSON.stringify(v)}`); }
@@ -29,14 +40,28 @@ export class CodexAdapter extends EventEmitter {
       for (const [threadId, id] of turns) this.emit('completed', { threadId, turn: { id, status: 'failed' } });
     });
     createInterface({ input: child.stdout }).on('line', line => {
+      if (this.child !== child) return;
       let message; try { message = JSON.parse(line); } catch { return; }
-      if (message.id !== undefined && this.pending.has(message.id)) {
+      if (!message.method && message.id !== undefined && this.pending.has(message.id)) {
         const pending = this.pending.get(message.id); this.pending.delete(message.id); clearTimeout(pending.timer);
         message.error ? pending.reject(new Error(message.error.message)) : pending.resolve(message.result); return;
       }
       if (['thread/closed', 'thread/archived'].includes(message.method)) { this.loaded.delete(message.params.threadId); this.models.delete(message.params.threadId); }
       if (message.method === 'turn/started') this.active.set(message.params.threadId, message.params.turn.id);
-      if (message.method === 'turn/completed') { this.active.delete(message.params.threadId); this.emit('completed', message.params); }
+      if (message.method === 'turn/completed') {
+        const { threadId, turn } = message.params;
+        const activeTurn = this.active.get(threadId);
+        if (activeTurn && activeTurn !== turn.id) return;
+        this.active.delete(threadId);
+        this.emit('completed', message.params);
+      }
+      if (message.method === 'item/tool/call' && message.id !== undefined) {
+        // A restarted server can reuse request IDs. Only reply to the child that sent this call.
+        void this.handleToolCall(message.params).then(result => {
+          if (this.child === child && child.stdin.writable) this.respond(message.id, result);
+        });
+        return;
+      }
       if (message.id !== undefined && message.method) {
         this.emit('approval', message);
         // Never silently accept a harness approval. Surface it to the desktop UI.
@@ -58,6 +83,18 @@ export class CodexAdapter extends EventEmitter {
     });
   }
   respond(id, result) { this.child?.stdin.write(JSON.stringify({ id, result }) + '\n'); }
+  async handleToolCall(params) {
+    try {
+      const { threadId, turnId, namespace, tool, arguments: args } = params ?? {};
+      if (!this.desktopAction || namespace != null || tool !== nativeAction.name) throw new Error('Unsupported Codex desktop tool');
+      if (!turnId || this.active.get(threadId) !== turnId) throw new Error('Inactive Codex turn');
+      if (!args || typeof args.contextId !== 'string') throw new Error('Missing ping context');
+      const result = await this.desktopAction(threadId, args);
+      return { success: true, contentItems: [{ type: 'inputText', text: JSON.stringify(result ?? { ok: true }) }] };
+    } catch (error) {
+      return { success: false, contentItems: [{ type: 'inputText', text: error.message }] };
+    }
+  }
   async capabilities() {
     await this.connect();
     const status = await this.rpc('mcpServerStatus/list', { limit: 100, detail: 'toolsAndAuthOnly' });
@@ -66,7 +103,7 @@ export class CodexAdapter extends EventEmitter {
   }
   async create() {
     await this.connect();
-    const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write', serviceTier: 'default' });
+    const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write', serviceTier: 'default', ...(this.desktopAction ? { dynamicTools: [nativeAction] } : {}) });
     this.configuredModel ??= result.model;
     this.loaded.add(result.thread.id); this.models.set(result.thread.id, result.model); return result.thread.id;
   }
@@ -132,8 +169,15 @@ export class CodexAdapter extends EventEmitter {
     this.effectiveModel = model.model; this.effectiveFastMode = this.selection.fastMode;
     const input = [{ type: 'text', text: `$lolping-your-ai\n${prompt}` }, { type: 'skill', name: 'lolping-your-ai', path: this.skillPath }];
     if (image) input.push({ type: 'localImage', path: image });
-    const result = await this.threadRpc('turn/start', id, { threadId: id, input, model: model.model, serviceTier, ...(effort ? { effort } : {}) });
-    this.active.set(id, result.turn.id); return result.turn.id;
+    // A fast turn can finish in the same stdout read as the start reply.
+    const ended = new Set();
+    const onCompletion = event => { if (event.threadId === id) ended.add(event.turn.id); };
+    this.on('completed', onCompletion);
+    try {
+      const { turn } = await this.threadRpc('turn/start', id, { threadId: id, input, model: model.model, serviceTier, ...(effort ? { effort } : {}) });
+      if (!ended.has(turn.id) && !this.active.has(id)) this.active.set(id, turn.id);
+      return turn.id;
+    } finally { this.off('completed', onCompletion); }
   }
   async steer(id, prompt, image) {
     const epoch = this.cancelEpoch.get(id);
@@ -146,11 +190,17 @@ export class CodexAdapter extends EventEmitter {
     this.cancelEpoch.set(id, (this.cancelEpoch.get(id) ?? 0) + 1);
     const turn = this.active.get(id); if (!turn) return;
     let listener, timer;
-    const finished = new Promise((resolve, reject) => {
+    const finished = new Promise(resolve => {
       listener = p => { if (p.threadId === id && p.turn.id === turn) resolve(); };
-      this.on('completed', listener); timer = setTimeout(() => reject(new Error('Codex has not confirmed cancellation')), 15000);
+      this.on('completed', listener);
     });
-    try { await this.rpc('turn/interrupt', { threadId: id, turnId: turn }); await finished; }
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Codex has not confirmed cancellation')), 15000);
+    });
+    try {
+      const interrupt = this.rpc('turn/interrupt', { threadId: id, turnId: turn });
+      await Promise.race([Promise.all([interrupt, finished]), deadline]);
+    }
     finally { this.off('completed', listener); clearTimeout(timer); }
   }
   close() { this.child?.kill(); }
