@@ -82,3 +82,58 @@ test('concurrent resumes share the native ownership request', async () => {
   await new Promise(r => setImmediate(r)); assert.equal(count, 1);
   release({ model: 'test' }); assert.deepEqual(await Promise.all([first, second]), ['s', 's']);
 });
+
+test('scoped Codex tool requires the owning turn and propagates target rejections', async () => {
+  const adapter = new CodexAdapter({ mcp: {} });
+  adapter.active.set('owner', 'current');
+  const params = { threadId: 'owner', turnId: 'current', namespace: null, tool: 'lolping_desktop_action', arguments: { contextId: 'old', action: 'click' } };
+  assert.equal((await adapter.handleToolCall(params)).success, false);
+  let actions = 0;
+  adapter.desktopAction = (thread, args) => { actions++; assert.equal(thread, 'owner'); assert.equal(args.contextId, 'old'); throw new Error('Stale ping context'); };
+  for (const invalid of [null, { ...params, namespace: 'other' }, { ...params, tool: 'other' }, { ...params, threadId: 'other' }, { ...params, turnId: 'old-turn' }, { ...params, arguments: {} }]) {
+    assert.equal((await adapter.handleToolCall(invalid)).success, false);
+  }
+  assert.equal(actions, 0);
+  const result = await adapter.handleToolCall(params);
+  assert.equal(result.success, false);
+  assert.match(result.contentItems[0].text, /Stale ping/);
+  assert.equal(actions, 1);
+});
+
+test('Codex cancellation reports a timeout if the interrupt RPC never acknowledges', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const adapter = new CodexAdapter({ mcp: {} });
+  adapter.active.set('thread', 'current');
+  adapter.rpc = () => new Promise(() => {});
+  const failure = assert.rejects(adapter.cancel('thread'), /has not confirmed cancellation/);
+  adapter.emit('completed', { threadId: 'thread', turn: { id: 'current', status: 'interrupted' } });
+  t.mock.timers.tick(15000);
+  await failure;
+  assert.equal(adapter.listenerCount('completed'), 0);
+});
+
+test('a late interruption for a previous turn cannot revoke its successor', async () => {
+  const adapter = fakeServer();
+  const completed = [];
+  adapter.on('completed', event => completed.push(event.turn.id));
+  try {
+    const thread = await adapter.create();
+    const barrier = new Promise(resolve => adapter.on('event', e => { if (e.method === 'test/barrier') resolve(); }));
+    const turn = await adapter.send(thread, 'late completion');
+    await barrier;
+    assert.equal(adapter.active.get(thread), turn);
+    assert.deepEqual(completed, []);
+  } finally { adapter.close(); }
+});
+
+test('turn/start cannot mark an already interrupted turn active again', async () => {
+  const adapter = new CodexAdapter({ mcp: {} });
+  adapter.modelCatalog = async () => [{ model: 'fixture', isDefault: true }];
+  adapter.threadRpc = async () => {
+    adapter.emit('completed', { threadId: 'thread', turn: { id: 'fast', status: 'interrupted' } });
+    return { turn: { id: 'fast' } };
+  };
+  assert.equal(await adapter.send('thread', 'fixture'), 'fast');
+  assert.equal(adapter.active.size, 0);
+  assert.equal(adapter.listenerCount('completed'), 0);
+});

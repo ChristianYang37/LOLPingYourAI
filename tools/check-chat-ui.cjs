@@ -7,8 +7,8 @@ const path = require('node:path');
 const { tmpdir } = require('node:os');
 const assert = require('node:assert/strict');
 const temp = mkdtempSync(path.join(require('node:os').tmpdir(), 'lolping-chat-'));
-buildSync({ stdin: { contents: "export * from './src/main/appProtocol'; export * from './src/shared/settings';", resolveDir: process.cwd() }, bundle: true, platform: 'node', external: ['electron'], outfile: path.join(temp, 'fixtures.cjs') });
-const { registerAppScheme, serveAppScheme, DEFAULT_SETTINGS } = require(path.join(temp, 'fixtures.cjs'));
+buildSync({ stdin: { contents: "export * from './src/main/appProtocol'; export * from './src/shared/settings'; export * from './src/main/companionWindow';", resolveDir: process.cwd() }, bundle: true, platform: 'node', external: ['electron'], define: { __dirname: JSON.stringify(path.resolve('out/main')) }, outfile: path.join(temp, 'fixtures.cjs') });
+const { registerAppScheme, serveAppScheme, DEFAULT_SETTINGS, CompanionWindow } = require(path.join(temp, 'fixtures.cjs'));
 rmSync(temp, { recursive: true, force: true });
 registerAppScheme();
 const settings = { ...DEFAULT_SETTINGS, language: 'zh-CN' };
@@ -27,7 +27,7 @@ async function waitFor(label, predicate) {
   throw new Error('Timed out waiting for ' + label);
 }
 app.whenReady().then(async () => {
-  const win = new BrowserWindow({ show: false, width: 980, height: 720, webPreferences: { backgroundThrottling: false, preload: path.resolve('out/preload/settings.js') } });
+  const win = new BrowserWindow({ show: true, width: 980, height: 720, webPreferences: { backgroundThrottling: false, preload: path.resolve('out/preload/settings.js') } });
   win.webContents.on('console-message', event => console.log('renderer:', event.message));
   win.webContents.on('render-process-gone', (_event, details) => console.error('renderer exited:', details));
   const js = code => win.webContents.executeJavaScript(code);
@@ -115,8 +115,17 @@ app.whenReady().then(async () => {
     assert.equal(await js("document.querySelector('.conversation-full form').getBoundingClientRect().bottom <= innerHeight"), true);
     writeFileSync(path.join(tmpdir(), 'lolping-chat-small-dark.png'), (await win.webContents.capturePage()).toPNG());
     state = { ...state, busy: true, task: { id: 'working-rich', startedAt: Date.now(), phase: 'working', mode: 'explore', target: { app: 'Practice board' }, preview: { file: 'ping-1.png', capturedAt: Date.now(), region: { imageWidth: 512, imageHeight: 512 } }, text: '# Explanation\n\n\\[E=mc^2\\]\n\n```js\nconst answer = 42;\n```\n\n<script>window.bad = true</script>\n\n![remote](https://example.invalid/tracker.png)' } };
-    const floating = new BrowserWindow({ show: false, width: 360, height: 360, webPreferences: { backgroundThrottling: false, preload: path.resolve('out/preload/companion.js') } });
-    await floating.loadURL('lolping://app/companion/index.html');
+    const card = new CompanionWindow(() => state);
+    ipcMain.removeHandler('ai:call');
+    ipcMain.handle('ai:call', (_event, method, args) => {
+      if (method === 'status') return state;
+      if (method === 'hideCard') return card.hide();
+      if (method === 'resizeCard') return card.resize(Boolean(args.expanded));
+      if (method === 'capturePreview') return { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jH1sAAAAASUVORK5CYII=' };
+      return {};
+    });
+    await card.update();
+    const floating = card.win;
     const fjs = code => floating.webContents.executeJavaScript(code);
     await waitFor('working emote and rich reply', () => fjs("!!document.querySelector('.working-emote') && !!document.querySelector('.katex') && !!document.querySelector('.capture-preview img')"));
     await fjs("document.querySelector('.conversation-body').scrollTop = 0");
@@ -127,7 +136,33 @@ app.whenReady().then(async () => {
     writeFileSync(path.join(tmpdir(), 'lolping-working-rich.png'), (await floating.webContents.capturePage()).toPNG());
     state = { ...state, busy: false, task: { ...state.task, phase: 'done' } }; floating.webContents.send('ai:changed');
     await waitFor('working illustration stops at completion', () => fjs("!document.querySelector('.working-emote')"));
-    floating.destroy();
+    state = { ...state, busy: true, task: { id: 'streaming-emote', signal: 'reaction', mode: 'emotion', phase: 'understanding', point: { x: 200, y: 200 }, text: '' } };
+    await card.update();
+    let shows = 0, hides = 0, reloads = 0;
+    const show = floating.showInactive.bind(floating), hide = floating.hide.bind(floating);
+    floating.showInactive = () => { shows++; return show(); };
+    floating.hide = () => { hides++; return hide(); };
+    floating.webContents.on('did-start-loading', () => { reloads++; });
+    for (let i = 0; i < 30; i++) {
+      state = { ...state, task: { ...state.task, text: `Streaming emote reply ${i + 1}` } };
+      await card.update(); await delay(80);
+      assert.equal(floating.isVisible(), true);
+    }
+    await waitFor('final streamed text', () => fjs("document.querySelector('.reply-text')?.textContent.includes('Streaming emote reply 30')"));
+    assert.equal(shows, 0); assert.equal(hides, 0); assert.equal(reloads, 0);
+    writeFileSync(path.join(tmpdir(), 'lolping-companion-stream.png'), (await floating.webContents.capturePage()).toPNG());
+    await fjs("document.querySelector('header button').click()");
+    await waitFor('dismissed companion', () => !floating.isVisible());
+    await card.update(); assert.equal(floating.isVisible(), false);
+    state = { ...state, task: { ...state.task, id: 'next-emote' } };
+    await card.update(); assert.equal(floating.isVisible(), true); assert.equal(shows, 1);
+    await card.withoutWindow(async () => {
+      state = { ...state, task: { id: 'chat', signal: 'chat', text: 'Text chat stays in the main window' } };
+      await card.update();
+    });
+    assert.equal(floating.isVisible(), false); assert.equal(shows, 1);
+    card.close();
+    console.log('Visible production companion: 30 streamed updates without show/hide/reload; dismiss, new emote and chat-switch checks passed.');
     console.log('Chat default, settings navigation, full replies, draft retention, follow-up context, stop action and compact dark layout passed.'); app.exit(0);
   } catch (e) { console.error(e); console.error('Renderer content:', await js('document.body.innerText').catch(String)); app.exit(1); }
 });

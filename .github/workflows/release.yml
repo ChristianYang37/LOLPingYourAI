@@ -19,8 +19,60 @@ jobs:
   verify:
     needs: metadata
     uses: ./.github/workflows/ci.yml
-  publish:
+  sign-mac:
+    name: Sign and notarize the macOS installer
     needs: verify
+    runs-on: macos-latest
+    environment: macos-release
+    timeout-minutes: 75
+    env:
+      MACOS_TEAM_ID: ${{ vars.MACOS_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: node node_modules/electron/install.js
+      - run: pnpm build:helper && pnpm build:desktop && pnpm build
+      - name: Package with Developer ID and Hardened Runtime
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          : "${CSC_LINK:?Missing Developer ID certificate}" "${CSC_KEY_PASSWORD:?Missing certificate password}"
+          pnpm exec electron-builder --mac dmg --arm64 --publish never --config tools/macos/release-config.cjs
+      - name: Notarize the signed disk image
+        env:
+          NOTARY_KEY_BASE64: ${{ secrets.MACOS_NOTARY_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          : "${NOTARY_KEY_BASE64:?Missing App Store Connect team key}" "${NOTARY_KEY_ID:?Missing key ID}" "${NOTARY_ISSUER:?Missing issuer}"
+          dmg="release/LOLPingYourAI-$(node -p 'require("./package.json").version')-arm64.dmg"
+          umask 077
+          tempdir=$(mktemp -d)
+          trap 'rm -rf "$tempdir"' EXIT
+          printf '%s' "$NOTARY_KEY_BASE64" | base64 -D > "$tempdir/key.p8"
+          xcrun notarytool submit "$dmg" --key "$tempdir/key.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait --timeout 40m --output-format json | tee "$tempdir/result.json"
+          jq -e '.status == "Accepted"' "$tempdir/result.json"
+          xcrun stapler staple "$dmg"
+      - name: Check Gatekeeper and launch the app from the stapled DMG
+        id: verified
+        run: bash tools/macos/verify-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos-arm64-notarized
+          path: ${{ steps.verified.outputs.dmg }}
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    needs: [verify, sign-mac]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,7 +84,7 @@ jobs:
           path: release
       - uses: actions/download-artifact@v4
         with:
-          name: installer-macos-arm64
+          name: installer-macos-arm64-notarized
           path: release
       - name: Check tag matches package version
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./package.json").version) process.exit(1)'
@@ -40,4 +92,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" release/LOLPingYourAI-Setup-*.exe release/LOLPingYourAI-*-arm64.dmg --verify-tag --title "LOLPingYourAI $RELEASE_TAG — macOS & Windows" --notes-file "docs/releases/$RELEASE_TAG.md"
+        run: |
+          version=${RELEASE_TAG#v}
+          gh release create "$RELEASE_TAG" "release/LOLPingYourAI-Setup-$version.exe" "release/LOLPingYourAI-$version-arm64.dmg" --verify-tag --title "LOLPingYourAI $RELEASE_TAG — macOS & Windows" --notes-file "docs/releases/$RELEASE_TAG.md"
