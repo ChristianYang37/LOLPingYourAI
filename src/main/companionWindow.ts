@@ -11,8 +11,12 @@ export class CompanionWindow {
   private restoreAfterHidden = false;
   constructor(private status: () => any) {}
   async update() {
-    if (!this.status().task) { this.restoreAfterHidden = false; if (this.win && !this.win.isDestroyed()) { this.win.webContents.send('ai:changed'); this.win.hide(); } return; }
-    if (this.status().task.signal === 'chat') { this.win?.hide(); return; }
+    const initialTask = this.status().task;
+    if (!initialTask || initialTask.signal === 'chat') {
+      this.restoreAfterHidden = false;
+      if (this.win && !this.win.isDestroyed()) { this.win.webContents.send('ai:changed'); if (this.win.isVisible()) this.win.hide(); }
+      return;
+    }
     if (!this.win || this.win.isDestroyed()) {
       const win = this.win = new BrowserWindow({ width: 360, height: 360, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#101d27', webPreferences: { preload: preloadPath('companion'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -22,7 +26,7 @@ export class CompanionWindow {
     await this.loading;
     if (!this.win || this.win.isDestroyed()) return;
     const task = this.status().task;
-    if (!task) { this.win.hide(); return; }
+    if (!task || task.signal === 'chat') { this.restoreAfterHidden = false; if (this.win.isVisible()) this.win.hide(); return; }
     const fresh = task.id !== this.taskId;
     if (fresh) {
       this.taskId = task.id;
@@ -35,7 +39,9 @@ export class CompanionWindow {
     this.win.webContents.send('ai:changed');
     if (this.dismissed !== task.id) {
       if (this.hiddenForCapture) this.restoreAfterHidden = true;
-      else this.win.showInactive();
+      // Streaming text only needs IPC; reordering an already-visible native
+      // window on every delta can flash the card or disturb window focus.
+      else if (!this.win.isVisible()) this.win.showInactive();
     }
   }
   hide() { this.dismissed = this.taskId; this.win?.hide(); }
@@ -47,12 +53,13 @@ export class CompanionWindow {
   }
   async withoutWindow<T>(fn: () => Promise<T>): Promise<T> {
     this.restoreAfterHidden ||= Boolean(this.win?.isVisible());
-    this.hiddenForCapture++; this.win?.hide();
+    this.hiddenForCapture++; if (this.win?.isVisible()) this.win.hide();
     try { return await fn(); }
     finally {
       this.hiddenForCapture--;
       if (!this.hiddenForCapture) {
-        if (this.restoreAfterHidden && this.dismissed !== this.taskId && this.win && !this.win.isDestroyed()) this.win.showInactive();
+        const task = this.status().task;
+        if (this.restoreAfterHidden && task && task.signal !== 'chat' && this.dismissed !== task.id && this.win && !this.win.isDestroyed() && !this.win.isVisible()) this.win.showInactive();
         this.restoreAfterHidden = false;
       }
     }
