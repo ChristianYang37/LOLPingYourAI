@@ -48,8 +48,8 @@ export class Teammate extends EventEmitter {
           this.approvals = this.approvals.filter(a => a.harness !== name);
           // stop() owns the terminal state until the native input has also drained.
           if (!this.stopInFlight) {
-            if (p.turn.status === 'interrupted') void this.finishInterruption();
-            else this.phase(p.turn.status === 'completed' ? (this.task?.phase === 'waiting' ? 'waiting' : 'done') : 'error');
+            if (p.turn.status === 'completed') this.phase(this.task?.phase === 'waiting' ? 'waiting' : 'done');
+            else void this.drainEndedTurn(p.turn.status);
           }
           if (p.turn.status === 'completed') void this.onDelivered(name).catch(e => this.notice(e.message));
         }
@@ -147,6 +147,8 @@ export class Teammate extends EventEmitter {
     this.expression = { event: rootEvent, at: event.receivedAt };
     // Revoke and send cancellation before waiting on screenshots/session creation or persistence.
     const stopping = urgent ? this.stop({ invalidate: false }) : Promise.resolve();
+    // Observe immediate interrupt errors while persistence is pending. The await below propagates them.
+    void stopping.catch(() => {});
     await this.store.write('ai-events', [...this.seen]);
     const session = this.sessions[event.harness];
     if (session && event.source === 'user') {
@@ -189,16 +191,16 @@ export class Teammate extends EventEmitter {
     }
     return this.admit(event, signal);
   }
-  async finishInterruption() {
-    // A harness can interrupt on its own while its last OS input is unwinding.
+  async drainEndedTurn(status) {
+    // A harness can interrupt or fail while its last OS input is unwinding.
     const task = this.task;
     const drain = this.gate.idle();
     this.interruptDrain = drain;
-    this.phase('stopping');
+    this.phase(status === 'interrupted' ? 'stopping' : 'error');
     await drain;
     if (this.interruptDrain !== drain) return;
     this.interruptDrain = null;
-    if (!this.stopInFlight && this.task === task && task?.phase === 'stopping') this.phase('stopped');
+    if (status === 'interrupted' && !this.stopInFlight && this.task === task && task?.phase === 'stopping') this.phase('stopped');
     this.emit('change');
     this.pump();
   }
@@ -215,10 +217,15 @@ export class Teammate extends EventEmitter {
     return this.stopInFlight;
   }
   async drainStop() {
-    await Promise.all(Object.entries(this.adapters).flatMap(([, a]) => [...a.active.keys()].map(id => a.cancel(id))));
-    await this.queue; // A late turn/start must settle before cancellation can be confirmed.
-    await Promise.all(Object.values(this.adapters).flatMap(a => [...a.active.keys()].map(id => a.cancel(id))));
-    await this.gate.idle(); this.phase('stopped');
+    try {
+      await Promise.all(Object.values(this.adapters).flatMap(a => [...a.active.keys()].map(id => a.cancel(id))));
+      await this.queue; // A late turn/start must settle before cancellation can be confirmed.
+      await Promise.all(Object.values(this.adapters).flatMap(a => [...a.active.keys()].map(id => a.cancel(id))));
+    } finally {
+      // The harness may exit before acknowledging the interrupt while native input is still running.
+      await this.gate.idle();
+    }
+    this.phase('stopped');
   }
   async process(event, signal) {
     const current = () => { if (event.generation !== this.generation) throw new Error('Ping superseded by stop or correction'); };

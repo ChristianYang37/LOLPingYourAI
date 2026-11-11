@@ -285,10 +285,12 @@ test('busy follow-up and duplicate receipts are logged once without dropping ear
   service.close();
 });
 
-test('unconfirmed cancellation never reports stopped or reopens the action gate', async () => {
+test('Retreat propagates a quick interrupt failure even when event persistence is still pending', async () => {
   const { service, adapter } = await fixture(); await service.dispatch({ signal: 'assist' });
   adapter.cancel = async () => { throw new Error('Harness has not confirmed cancellation'); };
-  await assert.rejects(service.stop(), /not confirmed/);
+  const write = service.store.write;
+  service.store.write = async (...args) => { await new Promise(resolve => setImmediate(resolve)); await write(...args); };
+  await assert.rejects(service.dispatch({ signal: 'retreat' }), /not confirmed/);
   assert.equal(service.task.phase, 'stopping'); assert.equal(service.gate.allowed, false);
   await assert.rejects(service.action({ contextId: service.context.id, action: 'type', text: 'late' }), /cancelled/);
 });
@@ -497,6 +499,40 @@ test('Retreat waits for native input to drain after the harness confirms interru
   await Promise.all([active, queued, stop]);
   assert.equal(calls, 1);
   assert.equal(service.task.phase, 'stopped');
+});
+
+for (const duringRetreat of [true, false]) test(`a harness exit ${duringRetreat ? 'during Retreat' : 'during Assist'} holds the next ping until old input drains`, async () => {
+  const { service, adapter } = await fixture();
+  const first = await service.dispatch({ signal: 'assist' });
+  const entered = Promise.withResolvers(), released = Promise.withResolvers();
+  service.desktop.action = async () => { entered.resolve(); await released.promise; };
+  const active = service.action({ contextId: first.contextId, action: 'type', text: 'first' });
+  await entered.promise;
+  const firstTask = service.task;
+  const error = new Error('Codex app-server exited');
+  const exit = id => {
+    adapter.active.delete(id);
+    adapter.emit('failure', error);
+    adapter.emit('completed', { threadId: id, turn: { status: 'failed' } });
+  };
+  let stop;
+  if (duringRetreat) {
+    adapter.cancel = async id => { exit(id); throw error; };
+    stop = assert.rejects(service.dispatch({ signal: 'retreat' }), /Codex app-server exited/);
+  } else {
+    exit(first.session);
+  }
+  await new Promise(resolve => setImmediate(resolve));
+  const next = await service.dispatch({ signal: 'assist' });
+  assert.equal(next.queued, true);
+  assert.equal(service.context.id, first.contextId);
+  assert.equal(service.gate.allowed, false);
+  released.resolve();
+  await Promise.all([active, stop]);
+  await service.queue;
+  assert.equal(firstTask.phase, 'error');
+  assert.equal(service.context.id, next.id);
+  assert.equal(adapter.sent.length, 2);
 });
 
 test('a harness-initiated interruption drains input before reporting stopped or admitting the next ping', async () => {
