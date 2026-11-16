@@ -16,6 +16,10 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
   if (message.method === 'turn/start') {
     send({ id: message.id, result: { turn: { id: 'turn-1' } } });
     send({ method: 'turn/started', params: { threadId: message.params.threadId, turn: { id: 'turn-1' } } });
+    if (message.params.input[0].text.includes('late completion')) {
+      send({ method: 'turn/completed', params: { threadId: message.params.threadId, turn: { id: 'previous-turn', status: 'interrupted' } } });
+      send({ method: 'test/barrier', params: {} });
+    }
     if (message.params.input[0].text.includes('crash')) setTimeout(() => process.exit(3), 20);
   }
 }).on('close', () => process.exit(0));

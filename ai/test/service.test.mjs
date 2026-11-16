@@ -285,10 +285,12 @@ test('busy follow-up and duplicate receipts are logged once without dropping ear
   service.close();
 });
 
-test('unconfirmed cancellation never reports stopped or reopens the action gate', async () => {
+test('Retreat propagates a quick interrupt failure even when event persistence is still pending', async () => {
   const { service, adapter } = await fixture(); await service.dispatch({ signal: 'assist' });
   adapter.cancel = async () => { throw new Error('Harness has not confirmed cancellation'); };
-  await assert.rejects(service.stop(), /not confirmed/);
+  const write = service.store.write;
+  service.store.write = async (...args) => { await new Promise(resolve => setImmediate(resolve)); await write(...args); };
+  await assert.rejects(service.dispatch({ signal: 'retreat' }), /not confirmed/);
   assert.equal(service.task.phase, 'stopping'); assert.equal(service.gate.allowed, false);
   await assert.rejects(service.action({ contextId: service.context.id, action: 'type', text: 'late' }), /cancelled/);
 });
@@ -474,4 +476,110 @@ test('failed persistence retains the recovery state and does not poison later re
   assert.equal(service.busy(), false); assert.ok(service.sessions.codex.writerConflict);
   service.saveSessions = save; adapter.resume = async id => id;
   assert.equal((await service.recoverSession({ harness: 'codex', sessionId: 'session-1' })).recovered, true);
+});
+
+test('Retreat waits for native input to drain after the harness confirms interruption', async () => {
+  const { service } = await fixture();
+  const { contextId } = await service.dispatch({ signal: 'assist' });
+  let releaseInput, markStarted, calls = 0;
+  const started = new Promise(resolve => { markStarted = resolve; });
+  service.desktop.action = async (_, __, signal) => {
+    calls++; markStarted();
+    await new Promise(resolve => { releaseInput = resolve; });
+    assert.equal(signal.aborted, true);
+  };
+  const active = service.action({ contextId, action: 'type', text: 'test board' });
+  await started;
+  const queued = assert.rejects(service.action({ contextId, action: 'click', x: 20, y: 40 }), /cancelled/);
+  const stop = service.dispatch({ signal: 'retreat' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(service.task.phase, 'stopping');
+  assert.equal(service.busy(), true);
+  releaseInput();
+  await Promise.all([active, queued, stop]);
+  assert.equal(calls, 1);
+  assert.equal(service.task.phase, 'stopped');
+});
+
+for (const duringRetreat of [true, false]) test(`a harness exit ${duringRetreat ? 'during Retreat' : 'during Assist'} holds the next ping until old input drains`, async () => {
+  const { service, adapter } = await fixture();
+  const first = await service.dispatch({ signal: 'assist' });
+  const entered = Promise.withResolvers(), released = Promise.withResolvers();
+  service.desktop.action = async () => { entered.resolve(); await released.promise; };
+  const active = service.action({ contextId: first.contextId, action: 'type', text: 'first' });
+  await entered.promise;
+  const firstTask = service.task;
+  const error = new Error('Codex app-server exited');
+  const exit = id => {
+    adapter.active.delete(id);
+    adapter.emit('failure', error);
+    adapter.emit('completed', { threadId: id, turn: { status: 'failed' } });
+  };
+  let stop;
+  if (duringRetreat) {
+    adapter.cancel = async id => { exit(id); throw error; };
+    stop = assert.rejects(service.dispatch({ signal: 'retreat' }), /Codex app-server exited/);
+  } else {
+    exit(first.session);
+  }
+  await new Promise(resolve => setImmediate(resolve));
+  const next = await service.dispatch({ signal: 'assist' });
+  assert.equal(next.queued, true);
+  assert.equal(service.context.id, first.contextId);
+  assert.equal(service.gate.allowed, false);
+  released.resolve();
+  await Promise.all([active, stop]);
+  await service.queue;
+  assert.equal(firstTask.phase, 'error');
+  assert.equal(service.context.id, next.id);
+  assert.equal(adapter.sent.length, 2);
+});
+
+test('a harness-initiated interruption drains input before reporting stopped or admitting the next ping', async () => {
+  const { service, adapter } = await fixture();
+  const first = await service.dispatch({ signal: 'assist' });
+  const entered = Promise.withResolvers(), released = Promise.withResolvers();
+  service.desktop.action = async (_args, _ctx, signal) => { entered.resolve(signal); await released.promise; };
+  const active = service.action({ contextId: first.contextId, action: 'type', text: 'first' });
+  const signal = await entered.promise;
+  adapter.active.delete(first.session);
+  adapter.emit('completed', { threadId: first.session, turn: { status: 'interrupted' } });
+  assert.equal(signal.aborted, true);
+  assert.equal(service.task.phase, 'stopping');
+  assert.equal(service.status().busy, true);
+  const next = await service.dispatch({ signal: 'assist' });
+  assert.equal(next.queued, true);
+  assert.equal(service.context.id, first.contextId);
+  const late = assert.rejects(service.action({ contextId: first.contextId, action: 'type', text: 'late' }), /cancelled/);
+  const firstTask = service.task;
+  released.resolve();
+  await Promise.all([active, late]);
+  await new Promise(resolve => setImmediate(resolve));
+  await service.queue;
+  assert.equal(firstTask.phase, 'stopped');
+  assert.equal(service.context.id, next.id);
+  assert.equal(adapter.sent.length, 2);
+  assert.equal(service.gate.allowed, true);
+});
+
+test('Retreat overlapping a harness interruption holds Stop and clears pending pings', async () => {
+  const { service, adapter } = await fixture();
+  const first = await service.dispatch({ signal: 'assist' });
+  const entered = Promise.withResolvers(), released = Promise.withResolvers();
+  service.desktop.action = async () => { entered.resolve(); await released.promise; };
+  const active = service.action({ contextId: first.contextId, action: 'type', text: 'first' });
+  await entered.promise;
+  adapter.active.delete(first.session);
+  adapter.emit('completed', { threadId: first.session, turn: { status: 'interrupted' } });
+  assert.equal((await service.dispatch({ signal: 'assist' })).queued, true);
+  const stop = service.dispatch({ signal: 'retreat' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(service.task.phase, 'stopping');
+  assert.equal(service.pendingPings.length, 0);
+  released.resolve();
+  await active;
+  assert.deepEqual(await stop, { stopped: true });
+  assert.equal(service.task.phase, 'stopped');
+  assert.equal(service.busy(), false);
+  assert.equal(adapter.sent.length, 1);
 });

@@ -10,16 +10,57 @@ async function fixture() {
   const win = { isVisible: () => visible, isDestroyed: () => false, hide: vi.fn(() => { visible = false; }), showInactive: vi.fn(() => { visible = true; }), getSize: () => [360, 360], setPosition: vi.fn(), webContents: { send: vi.fn() } };
   card.win = win as any;
   await card.update(); win.showInactive.mockClear();
-  return { card, win, clearTask: () => { task = null; } };
+  return { card, win, clearTask: () => { task = null; }, setTask: (value: any) => { task = value; } };
 }
 const deferred = () => { let done!: () => void; const promise = new Promise<void>(resolve => { done = resolve; }); return { promise, done }; };
 
 describe('companion visibility during desktop work', () => {
+  it('only refreshes content when the card is already visible', async () => {
+    const { card, win } = await fixture();
+    for (let i = 0; i < 20; i++) await card.update();
+    expect(win.showInactive).not.toHaveBeenCalled();
+    expect(win.webContents.send).toHaveBeenCalledWith('ai:changed');
+  });
+  it('does not restore the floating card after switching to text chat during capture', async () => {
+    const { card, win, setTask } = await fixture();
+    await card.withoutWindow(async () => {
+      setTask({ id: 'chat', signal: 'chat' });
+      await card.update();
+    });
+    expect(win.isVisible()).toBe(false);
+    expect(win.showInactive).not.toHaveBeenCalled();
+  });
+  it('rechecks chat eligibility after an asynchronous page load', async () => {
+    const { card, win, setTask } = await fixture();
+    const loading = deferred();
+    (card as any).loading = loading.promise;
+    const update = card.update();
+    setTask({ id: 'chat', signal: 'chat', point: { x: 200, y: 200 } });
+    loading.done(); await update;
+    expect(win.isVisible()).toBe(false);
+    expect(win.showInactive).not.toHaveBeenCalled();
+  });
   it('refreshes and hides a recovered conflict card instead of leaving stale recovery controls', async () => {
     const { card, win, clearTask } = await fixture();
     await card.withoutWindow(async () => { clearTask(); await card.update(); });
     expect(win.isVisible()).toBe(false); expect(win.showInactive).not.toHaveBeenCalled();
     expect(win.webContents.send).toHaveBeenCalledWith('ai:changed');
+  });
+  it('does not restore a cleared task before the next coalesced update', async () => {
+    const { card, win, clearTask } = await fixture();
+    await card.withoutWindow(async () => { clearTask(); });
+    expect(win.isVisible()).toBe(false);
+    expect(win.showInactive).not.toHaveBeenCalled();
+  });
+  it('shows a new task once after a dismissed card and keeps streaming updates inactive', async () => {
+    const { card, win, setTask } = await fixture();
+    card.hide();
+    await card.update();
+    expect(win.isVisible()).toBe(false);
+    setTask({ id: 'new-emote', signal: 'reaction', point: { x: 200, y: 200 } });
+    await card.update(); await card.update();
+    expect(win.isVisible()).toBe(true);
+    expect(win.showInactive).toHaveBeenCalledTimes(1);
   });
   it('stays hidden through progress updates and restores after a failed action', async () => {
     const { card, win } = await fixture();

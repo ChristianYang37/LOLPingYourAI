@@ -38,6 +38,13 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   });
   const adapters = makeAdapters(mcp);
   const service = new Teammate({ store, desktop, adapters }); await service.init();
+  // Only the teammate gets this capability. Icon-generation adapters use a separate bridge.
+  if (process.platform === 'darwin' && process.env.LOLPINGAI_CODEX_SCOPED_ACTION === '1') {
+    adapters.codex.desktopAction = (threadId: string, args: { contextId: string }) => {
+      if (service.context?.harness !== 'codex' || service.sessions.codex?.id !== threadId) throw new Error('Inactive Codex desktop session');
+      return service.action(args);
+    };
+  }
   const icons = new IconCandidates(join(settingsDir(), 'icon-candidates'));
   const bridge = await startBridge(service, store);
   const iconJob = new IconJob({ icons, mcp, makeAdapter: (connection: any, harness: keyof typeof adapters) => makeAdapters(connection)[harness], notice: (text: string) => service.notice(text) });
